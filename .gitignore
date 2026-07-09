@@ -2,6 +2,9 @@
 __pycache__/
 *.pyc
 data/raw/*
-data/processed/*
+data/cleaned/*
+data/chunks/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+
+.venv/
