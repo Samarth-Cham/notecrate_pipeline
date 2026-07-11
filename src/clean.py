@@ -1,5 +1,7 @@
 import re
 from pathlib import Path
+import fitz  # pymupdf
+
 
 RAW = Path("data/raw")
 CLEAN = Path("data/cleaned")
@@ -25,6 +27,9 @@ def clean_text(text: str) -> str:
         r"\1",
         text,
     )
+
+    text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
+
 
     # 3. Note/warning/tip markers: drop the markers, keep the prose inside.
     text = re.sub(r"\{\{[<%]\s*/?\s*(note|warning|caution|tip)\s*[>%]\}\}", "", text)
@@ -53,6 +58,22 @@ for f in RAW.glob("*.md"):
         skipped += 1
         continue
     (CLEAN / f.name).write_text(cleaned, encoding="utf-8")
+    kept += 1
+
+
+for f in RAW.glob("*.pdf"):
+    doc = fitz.open(f)
+    # Extract text page by page; join with newlines
+    text = "\n".join(page.get_text() for page in doc)
+    doc.close()
+    # PDFs don't have Hugo shortcodes, but clean_text is harmless on them
+    # and the blank-line collapse + length filter still apply.
+    cleaned = clean_text(text)
+    if len(cleaned) < MIN_CHARS:
+        skipped += 1
+        continue
+    # Save as .md so the chunker picks it up with the same glob
+    (CLEAN / f"pdf_{f.stem}.md").write_text(cleaned, encoding="utf-8")
     kept += 1
 
 print(f"Kept {kept}, skipped {skipped} stubs")
