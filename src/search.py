@@ -7,9 +7,14 @@ import sys
 import psycopg
 import requests
 
-OLLAMA = "http://localhost:11434"
-EMBED_MODEL = "nomic-embed-text"
-DB_URL = "postgresql://postgres:notecrate@localhost:5432/notecrate"
+import os
+from dotenv import load_dotenv
+
+load_dotenv()  # reads .env from the current working directory into os.environ
+
+OLLAMA = os.environ["OLLAMA_URL"]
+EMBED_MODEL = os.environ["EMBED_MODEL"]
+DB_URL = os.environ["DATABASE_URL"]
 
 query = sys.argv[1] if len(sys.argv) > 1 else "how do I configure pod restart policy"
 
@@ -21,7 +26,6 @@ qvec = r.json()["embedding"]
 
 with psycopg.connect(DB_URL) as conn:
     with conn.cursor() as cur:
-        # <=> is pgvector's cosine DISTANCE operator (0 = identical).
         # Similarity = 1 - distance, computed for familiar scoring.
         cur.execute("""
             SELECT source, section, text, 1 - (embedding <=> %s::vector) AS score
