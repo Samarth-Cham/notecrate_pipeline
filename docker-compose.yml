@@ -1,0 +1,30 @@
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_PASSWORD: notecrate
+      POSTGRES_DB: notecrate
+    ports:
+      - "5432:5432"          # still exposed to host so index.py/psql work from Windows
+    volumes:
+      - pgvector_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 10
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://postgres:notecrate@db:5432/notecrate
+      OLLAMA_URL: http://host.docker.internal:11434
+      EMBED_MODEL: nomic-embed-text
+      LLM_MODEL: llama3.1:8b
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgvector_data:
