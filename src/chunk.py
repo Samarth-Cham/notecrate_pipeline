@@ -14,8 +14,8 @@ from langchain_text_splitters import (
 cleaned = Path("data/cleaned")
 out = Path("data/chunks")
 out.mkdir(parents= True, exist_ok= True)
-chunk_size = int(sys.argv[1]) if len(sys.argv) > 1 else 600
-overlap = int(sys.argv[2]) if len(sys.argv) > 2 else 80
+chunk_size = int(sys.argv[1]) if len(sys.argv) > 1 else 400
+overlap = int(sys.argv[2]) if len(sys.argv) > 2 else 50
 
 # --- Tokenizer ---------------------------------------------------------------
 # Size is measured in TOKENS, not characters: embedding models have token

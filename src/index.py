@@ -30,10 +30,39 @@ CACHE_FILE = Path("data/embed_cache.jsonl")
 # --- embedding + cache --------------------------------------------------------
 
 def embed(text: str) -> list[float]:
-    r = requests.post(f"{OLLAMA}/api/embeddings",
-                      json={"model": EMBED_MODEL, "prompt": text})
-    r.raise_for_status()
-    return r.json()["embedding"]
+
+    r = requests.post(
+        f"{OLLAMA}/api/embeddings",
+        json={
+            "model": EMBED_MODEL,
+            "prompt": text,
+        },
+        timeout=120,
+        )
+
+    if not r.ok:
+        print("\n" + "=" * 80)
+        print("OLLAMA EMBEDDING ERROR")
+        print("=" * 80)
+        print("Status Code:", r.status_code)
+        print("Model:", EMBED_MODEL)
+        print("Text Length:", len(text))
+        print("\nFirst 1000 characters:")
+        print(text[:1000])
+        print("\nResponse Body:")
+        print(r.text)
+        print("=" * 80 + "\n")
+
+        r.raise_for_status()
+
+        data = r.json()
+
+        if "embedding" not in data:
+            raise RuntimeError(
+                f"Unexpected Ollama response: {json.dumps(data)[:1000]}"
+            )
+
+        return data["embedding"]
 
 
 def text_hash(text: str) -> str:
