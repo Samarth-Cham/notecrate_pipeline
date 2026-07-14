@@ -1,6 +1,8 @@
-import hashlib, json
+import hashlib
+import json
 from pathlib import Path
-import os, psycopg
+import os
+import psycopg
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
