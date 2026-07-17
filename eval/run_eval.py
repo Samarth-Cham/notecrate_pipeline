@@ -65,7 +65,12 @@ def retrieve_for_eval(query: str) -> tuple[list[dict], float]:
     of mode — refusal thresholds are calibrated in cosine space."""
     vec_hits = retrieve(query)
     vec_top = vec_hits[0]["score"] if vec_hits else 0.0
-
+    if MODE == "reranked":
+        from src.rerank import rerank          # lazy: torch loads only in this mode
+        hits = [{"source": h["source"], "score": h["rerank_score"]}
+                for h in rerank(query)]
+        return hits, vec_top
+    
     if MODE == "hybrid":
         hits = [{"source": h["source"], "score": h["rrf_score"]}
                 for h in hybrid_search(query)]
