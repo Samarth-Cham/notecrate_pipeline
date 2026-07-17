@@ -22,7 +22,12 @@ import requests
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent.parent
-load_dotenv(ROOT / ".env")
+load_dotenv(ROOT / ".env")  
+
+sys.path.insert(0, str(ROOT))
+from src.hybrid_search import hybrid_search
+
+MODE = sys.argv[1] if len(sys.argv) > 1 else "baseline"
 
 OLLAMA = os.environ["OLLAMA_URL"]
 EMBED_MODEL = os.environ["EMBED_MODEL"]
@@ -55,10 +60,21 @@ def retrieve(query: str) -> list[dict]:
     return [{"source": r[0], "score": r[1]} for r in rows]
 
 
+def retrieve_for_eval(query: str) -> tuple[list[dict], float]:
+    """Returns (hits, vector_top_score). Vector score computed regardless
+    of mode — refusal thresholds are calibrated in cosine space."""
+    vec_hits = retrieve(query)
+    vec_top = vec_hits[0]["score"] if vec_hits else 0.0
+
+    if MODE == "hybrid":
+        hits = [{"source": h["source"], "score": h["rrf_score"]}
+                for h in hybrid_search(query)]
+        return hits, vec_top
+    return vec_hits, vec_top
+
 def score_question(q: dict) -> dict:
-    hits = retrieve(q["question"])
+    hits, top_score = retrieve_for_eval(q["question"])
     retrieved_sources = [h["source"] for h in hits]
-    top_score = hits[0]["score"] if hits else 0.0
     expected = set(q["expected_sources"])
 
     result = {"id": q["id"], "category": q["category"],

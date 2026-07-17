@@ -103,7 +103,8 @@ with psycopg.connect(DB_URL) as conn:
                 source_type text,
                 section     text,
                 metadata    jsonb,
-                embedding   vector(768)
+                embedding   vector(768),
+                text_search tsvector GENERATED ALWAYS AS (to_tsvector('english', text)) STORED
             )
         """)
 
@@ -153,10 +154,16 @@ with psycopg.connect(DB_URL) as conn:
 
         # HNSW index built AFTER bulk insert — much faster than
         # maintaining it during inserts.
+        # HNSW index built AFTER bulk insert — much faster than
+        # maintaining it during inserts.
         cur.execute("""
             CREATE INDEX ON chunks
             USING hnsw (embedding vector_cosine_ops)
         """)
+
+        # GIN index for full-text search (the keyword half of hybrid)
+        cur.execute("CREATE INDEX ON chunks USING gin (text_search)")
+
         conn.commit()
 
         cur.execute("SELECT count(*) FROM chunks")
