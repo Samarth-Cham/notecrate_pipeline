@@ -19,7 +19,28 @@ jobs:
         run: pip install ruff
 
       - name: Lint
-        run: ruff check src/
+        run: ruff check src/ eval/ tests/
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      # Several modules read config at import time. The tests never connect to
+      # anything, but the variables have to exist for the imports to succeed.
+      - name: Provide placeholder config
+        run: cp .env.example .env
+
+      - name: Unit tests
+        run: pytest tests/ -q
 
   secrets-scan:
     runs-on: ubuntu-latest

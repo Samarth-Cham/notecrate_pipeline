@@ -32,7 +32,8 @@ def embed(text: str) -> list[float]:
 
 HYBRID_SQL = """
 WITH vector_hits AS (
-    SELECT id, ROW_NUMBER() OVER (ORDER BY embedding <=> %(qvec)s::vector) AS rank
+    SELECT id, ROW_NUMBER() OVER (ORDER BY embedding <=> %(qvec)s::vector) AS rank,
+           1 - (embedding <=> %(qvec)s::vector) AS sim
     FROM chunks
     ORDER BY embedding <=> %(qvec)s::vector
     LIMIT %(cand)s
@@ -45,10 +46,15 @@ text_hits AS (
     WHERE text_search @@ websearch_to_tsquery('english', %(q)s)
     LIMIT %(cand)s
 )
-SELECT c.source, c.section, c.text,
+SELECT c.id, c.source, c.section, c.text,
        COALESCE(1.0 / (%(k)s + v.rank), 0) +
        COALESCE(1.0 / (%(k)s + t.rank), 0) AS rrf_score,
-       v.rank AS vec_rank, t.rank AS txt_rank
+       v.rank AS vec_rank, t.rank AS txt_rank,
+       v.sim AS vec_score,
+       -- vector_hits is ordered by distance and capped at %(cand)s, so its
+       -- max similarity IS the corpus-wide vector top-1. Carried on every row
+       -- so the noise-floor gate works without a second embed + query.
+       (SELECT MAX(sim) FROM vector_hits) AS vec_top
 FROM vector_hits v
 FULL OUTER JOIN text_hits t USING (id)
 JOIN chunks c ON c.id = COALESCE(v.id, t.id)
@@ -57,16 +63,26 @@ LIMIT %(topn)s
 """
 
 
-def hybrid_search(query: str) -> list[dict]:
-    qvec = embed(query)
+def hybrid_search(query: str, top_n: int = None, qvec: list[float] = None) -> list[dict]:
+    """Top-n chunks by RRF over vector + full-text ranks.
+
+    `qvec` lets a caller reuse an embedding it already computed.
+    """
+    if qvec is None:
+        qvec = embed(query)
     with psycopg.connect(DB_URL) as conn:
         rows = conn.execute(HYBRID_SQL, {
             "qvec": str(qvec), "q": query,
-            "cand": CANDIDATES, "k": RRF_K, "topn": TOP_N,
+            "cand": CANDIDATES, "k": RRF_K,
+            "topn": TOP_N if top_n is None else top_n,
         }).fetchall()
     return [
-        {"source": r[0], "section": r[1], "text": r[2],
-         "rrf_score": float(r[3]), "vec_rank": r[4], "txt_rank": r[5]}
+        {"id": r[0], "source": r[1], "section": r[2], "text": r[3],
+         "rrf_score": float(r[4]), "vec_rank": r[5], "txt_rank": r[6],
+         # NULL when the chunk was found by keyword only, i.e. it never
+         # entered the vector top-CANDIDATES.
+         "vec_score": float(r[7]) if r[7] is not None else None,
+         "vec_top": float(r[8]) if r[8] is not None else 0.0}
         for r in rows
     ]
 

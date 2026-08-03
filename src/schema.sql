@@ -28,8 +28,9 @@ CREATE TABLE chunks (
     ingested         date,
     n_tokens         int,
 
-    -- keyword side for Week 4 hybrid search: maintained automatically
-    tsv tsvector GENERATED ALWAYS AS (to_tsvector('english', text)) STORED
+    -- keyword side of hybrid search: maintained automatically.
+    -- Name must match index.py and hybrid_search.py — they query it directly.
+    text_search tsvector GENERATED ALWAYS AS (to_tsvector('english', text)) STORED
 );
 
 -- vector similarity (cosine)
@@ -40,5 +41,5 @@ CREATE INDEX chunks_embedding_hnsw ON chunks
 CREATE INDEX chunks_source_id_idx        ON chunks (source_id);          -- revocation: DELETE WHERE source_id = ...
 CREATE INDEX chunks_permission_scope_idx ON chunks (permission_scope);   -- permission filter before rank
 
--- keyword retrieval (Week 4)
-CREATE INDEX chunks_tsv_gin ON chunks USING gin (tsv);
+-- keyword retrieval
+CREATE INDEX chunks_text_search_gin ON chunks USING gin (text_search);

@@ -21,11 +21,12 @@ import psycopg
 import requests
 from dotenv import load_dotenv
 
-ROOT = Path(__file__).resolve().parent.parent
-load_dotenv(ROOT / ".env")  
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-sys.path.insert(0, str(ROOT))
 from src.hybrid_search import hybrid_search
+
+ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(ROOT / ".env")
 
 MODE = sys.argv[1] if len(sys.argv) > 1 else "baseline"
 
@@ -106,7 +107,7 @@ def score_question(q: dict) -> dict:
 
 
 def main():
-    questions = [json.loads(l) for l in QUESTIONS.open(encoding="utf-8") if l.strip()]
+    questions = [json.loads(line) for line in QUESTIONS.open(encoding="utf-8") if line.strip()]
     results = [score_question(q) for q in questions]
 
     positives = [r for r in results if not r["should_refuse"]]
@@ -143,7 +144,7 @@ def main():
         print(f"  {'refusal_accuracy':22s} {refusal_rate:.3f}")
 
     # per-category slice — this is where corpus-balance effects show up
-    print(f"\nBY CATEGORY (hit rate):")
+    print("\nBY CATEGORY (hit rate):")
     cats = sorted({r["category"] for r in positives})
     for cat in cats:
         sub = [r for r in positives if r["category"] == cat]

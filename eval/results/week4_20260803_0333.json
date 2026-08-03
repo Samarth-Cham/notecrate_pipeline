@@ -1,0 +1,104 @@
+{
+  "label": "week4",
+  "verified": true,
+  "aggregates": {
+    "faithfulness": 0.334,
+    "answer_relevancy": 0.81,
+    "keyword_coverage": 0.75,
+    "latency_s_mean": 52.3,
+    "latency_s_p95": 67.3,
+    "answered": 4,
+    "multi_hop_routed": 2,
+    "conflicts_flagged": 4
+  },
+  "results": [
+    {
+      "id": 1,
+      "category": "k8s",
+      "question": "How does pod restart policy work?",
+      "route_kind": "simple",
+      "refused": false,
+      "should_refuse": false,
+      "latency_s": 58.6,
+      "conflicts": 0,
+      "answer": "A Pod will not be restarted when the init container image is changed, or the init container completion record has been lost due to garbage collection [1]. The `restartPolicy` for a Pod applies to app containers, and container restart policy and rules apply to app containers [3]. If an init container is created with its `restartPolicy` set to `Always`, it will start and remain running during the entire life of the Pod [4].",
+      "confidence": "strong",
+      "keyword_coverage": 0.5,
+      "answer_relevancy": 0.6208417588135242,
+      "faithfulness": 0.0,
+      "grounding": {
+        "grounded": 0,
+        "inferred": 0,
+        "uncertain": 3,
+        "classified": 3,
+        "faithfulness": 0.0
+      }
+    },
+    {
+      "id": 2,
+      "category": "k8s",
+      "question": "What is the difference between a Deployment and a StatefulSet?",
+      "route_kind": "multi_hop",
+      "refused": false,
+      "should_refuse": false,
+      "latency_s": 50.6,
+      "conflicts": 0,
+      "answer": "StatefulSets are recommended for applications requiring stable network identifiers, persistent storage, ordered deployment and scaling, and automated rolling updates [6]. Deployments provide a higher-level API with declarative, server-side updates and additional features, but do not guarantee these specific requirements [4].",
+      "confidence": "strong",
+      "keyword_coverage": 0.5,
+      "answer_relevancy": 0.9410060101081182,
+      "faithfulness": 0.5,
+      "grounding": {
+        "grounded": 1,
+        "inferred": 0,
+        "uncertain": 1,
+        "classified": 2,
+        "faithfulness": 0.5
+      }
+    },
+    {
+      "id": 3,
+      "category": "k8s",
+      "question": "How do init containers differ from sidecar containers?",
+      "route_kind": "multi_hop",
+      "refused": false,
+      "should_refuse": false,
+      "latency_s": 67.3,
+      "conflicts": 4,
+      "answer": "Init containers run to completion before the main application container starts, whereas sidecar containers run concurrently with the main application container [1]. Init containers do not support lifecycle probes or livenessProbe, while sidecar containers do [1].\n\nSources disagree on other differences:\n\n* [2] claims init containers are for setup scripts and can be used alongside app containers, while [4] states that unlike sidecar containers, init containers stop before the main containers start up.\n* [3] describes sidecar containers as secondary containers that run along with the main application container, whereas [6] states that sidecar containers have their own independent lifecycles and can be started, stopped, and restarted independently of app containers.\n* [4] claims init containers cannot exchange messages with the app container in a Pod, while [2] implies they can be used for data exchange.\n\nThe sources contradict each other on these points.",
+      "confidence": "strong",
+      "keyword_coverage": 1.0,
+      "answer_relevancy": 0.8325276002612196,
+      "faithfulness": 0.167,
+      "grounding": {
+        "grounded": 1,
+        "inferred": 0,
+        "uncertain": 5,
+        "classified": 6,
+        "faithfulness": 0.167
+      }
+    },
+    {
+      "id": 4,
+      "category": "k8s",
+      "question": "What are Kubernetes namespaces used for?",
+      "route_kind": "simple",
+      "refused": false,
+      "should_refuse": false,
+      "latency_s": 32.7,
+      "conflicts": 0,
+      "answer": "Namespaces provide a mechanism for isolating groups of resources within a single cluster [1]. They divide cluster resources between multiple users (via resource quota) and allow for names of resources to be unique within a namespace, but not across namespaces [2]. This enables multiple teams or projects to use the same cluster without conflicts [2].",
+      "confidence": "strong",
+      "keyword_coverage": 1.0,
+      "answer_relevancy": 0.8442279250108473,
+      "faithfulness": 0.667,
+      "grounding": {
+        "grounded": 2,
+        "inferred": 0,
+        "uncertain": 1,
+        "classified": 3,
+        "faithfulness": 0.667
+      }
+    }
+  ]
+}

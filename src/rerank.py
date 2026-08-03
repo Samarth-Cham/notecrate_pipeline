@@ -28,27 +28,30 @@ RERANK_MODEL = "BAAI/bge-reranker-base"
 CANDIDATES = 20   # how many hybrid results to rerank
 TOP_N = 5
 
-# Loaded once at import — first run downloads ~1GB of weights to
-# ~/.cache/huggingface; subsequent runs load from disk (~5s).
-_model = CrossEncoder(RERANK_MODEL)
+_model = None
 
 
-def rerank(query: str, top_n: int = TOP_N) -> list[dict]:
-    # Widen the hybrid net: temporarily lift its TOP_N to CANDIDATES
-    import src.hybrid_search as hs
-    original = hs.TOP_N
-    hs.TOP_N = CANDIDATES
-    try:
-        candidates = hybrid_search(query)
-    finally:
-        hs.TOP_N = original
+def _load():
+    """Loaded on first use, not at import: the first call downloads ~1GB of
+    weights to ~/.cache/huggingface (later runs read from disk in ~5s). Doing
+    that at import means anything that merely imports the pipeline — a unit
+    test, `--help` — pays for it."""
+    global _model
+    if _model is None:
+        _model = CrossEncoder(RERANK_MODEL)
+    return _model
+
+
+def rerank(query: str, top_n: int = TOP_N, qvec: list[float] = None) -> list[dict]:
+    # Widen the hybrid net: it returns 5 by default, we want CANDIDATES to score.
+    candidates = hybrid_search(query, top_n=CANDIDATES, qvec=qvec)
 
     if not candidates:
         return []
 
     # One (query, chunk_text) pair per candidate — scored jointly.
     pairs = [(query, c["text"]) for c in candidates]
-    scores = _model.predict(pairs)          # numpy array of relevance logits
+    scores = _load().predict(pairs)         # numpy array of relevance logits
 
     for c, s in zip(candidates, scores):
         c["rerank_score"] = float(s)
