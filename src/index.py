@@ -104,6 +104,9 @@ with psycopg.connect(DB_URL) as conn:
                 section     text,
                 metadata    jsonb,
                 embedding   vector(768),
+                -- Populated by src/backfill_roles.py, not here. This script
+                -- DROPs the table, so re-run that backfill afterwards.
+                roles       text[],
                 text_search tsvector GENERATED ALWAYS AS (to_tsvector('english', text)) STORED
             )
         """)
@@ -137,7 +140,8 @@ with psycopg.connect(DB_URL) as conn:
 
                 if len(batch) >= BATCH:
                     cur.executemany(
-                        "INSERT INTO chunks VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                        "INSERT INTO chunks (id, text, source, source_type, section, "
+                        "metadata, embedding) VALUES (%s, %s, %s, %s, %s, %s, %s)",
                         batch,
                     )
                     conn.commit()
@@ -147,7 +151,8 @@ with psycopg.connect(DB_URL) as conn:
 
             if batch:
                 cur.executemany(
-                    "INSERT INTO chunks VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                    "INSERT INTO chunks (id, text, source, source_type, section, "
+                        "metadata, embedding) VALUES (%s, %s, %s, %s, %s, %s, %s)",
                     batch,
                 )
                 conn.commit()

@@ -24,7 +24,20 @@ replacing this file, not the pipeline.
   keyword_coverage  fraction of `expected_answer_contains` terms present —
                     deterministic, no model in the loop, catches regressions
                     the LLM-scored metrics are too noisy to see
-  refusal           negative/freshness questions: did the pipeline decline?
+  refusal           negative/freshness questions: did the pipeline decline, by
+                    EITHER mechanism (see below)?
+
+Refusal has two layers and they catch different things:
+
+  the gate   cosine similarity below the noise floor, so generation never runs.
+             Cheap (~11s vs ~60s) but it can only see topical distance.
+  the model  the answer itself declines after reading the sources.
+
+A freshness question — "how did we fix X", where X happened after the corpus
+was exported — is topically ON-corpus, so the gate cannot catch it by
+construction. Only a model that has read the sources can notice the answer
+isn't there. Scoring the gate alone therefore understates the system: it marks
+a correct, graceful refusal as a failure.
 """
 
 import argparse
@@ -51,6 +64,15 @@ RELEVANCY_SYSTEM = (
     "Given an answer, write the questions it was most likely responding to. "
     'Reply with JSON only: {"questions": ["...", "..."]}. '
     f"Write exactly {RELEVANCY_N} questions. Do not explain."
+)
+
+REFUSAL_SYSTEM = (
+    "You are grading whether an answer DECLINES to answer the question.\n"
+    'Reply with JSON only: {"declines": true} or {"declines": false}.\n'
+    "declines = true when the answer says the information is not in its "
+    "sources, or that the question's premise is wrong.\n"
+    "declines = false when the answer actually addresses the question, even "
+    "if it adds caveats or hedges."
 )
 
 
@@ -82,6 +104,18 @@ def answer_relevancy(question: str, answer: str) -> float | None:
     return sum(cosine(qvec, embed(g)) for g in generated) / len(generated)
 
 
+def declines_to_answer(question: str, answer: str) -> bool:
+    """Did the generated answer decline? Judged by the LLM rather than by
+    phrase-matching: a graceful refusal reads like "we didn't actually fix
+    that; the sources discuss GitHub auth, not pgvector", which shares no
+    fixed wording with "there is no information on this in the sources"."""
+    parsed = chat_json([
+        {"role": "system", "content": REFUSAL_SYSTEM},
+        {"role": "user", "content": f"Question: {question}\n\nAnswer: {answer}"},
+    ])
+    return bool(parsed.get("declines")) if isinstance(parsed, dict) else False
+
+
 def keyword_coverage(answer: str, expected: list[str]) -> float | None:
     if not expected:
         return None
@@ -89,9 +123,10 @@ def keyword_coverage(answer: str, expected: list[str]) -> float | None:
     return sum(1 for term in expected if term.lower() in low) / len(expected)
 
 
-def score_question(q: dict, *, verify: bool) -> dict:
+def score_question(q: dict, *, verify: bool, conflicts: bool = False) -> dict:
     started = time.perf_counter()
-    result = answer_question(q["question"], verify_answer=verify)
+    result = answer_question(q["question"], verify_answer=verify,
+                             detect_conflicts_enabled=conflicts)
     elapsed = time.perf_counter() - started
 
     row = {
@@ -99,23 +134,27 @@ def score_question(q: dict, *, verify: bool) -> dict:
         "category": q["category"],
         "question": q["question"],
         "route_kind": result["route"]["kind"],
-        "refused": result["refused"],
+        "gate_refused": result["refused"],
         "should_refuse": not q["expected_sources"],
+        "vector_top_score": result["vector_top_score"],   # for floor calibration
         "latency_s": round(elapsed, 1),
         "conflicts": len(result["conflicts"]),
     }
 
     if result["refused"]:
-        # Correct only if this was a negative/freshness question.
+        # Generation never ran. Correct only if this was a negative question.
         row["refused_correctly"] = row["should_refuse"]
         return row
 
-    if row["should_refuse"]:
-        # Answered something it should have declined — a hallucination risk,
-        # and worth seeing the text of.
-        row["refused_correctly"] = False
-
     row["answer"] = result["answer"]
+
+    if row["should_refuse"]:
+        # The gate let it through, but the model still gets to decline after
+        # reading the sources — the only layer that can catch a freshness gap.
+        row["answer_refused"] = declines_to_answer(q["question"], result["answer"])
+        row["refused_correctly"] = row["answer_refused"]
+        return row
+
     row["confidence"] = result["confidence"]
     row["keyword_coverage"] = keyword_coverage(
         result["answer"], q.get("expected_answer_contains", []))
@@ -141,6 +180,9 @@ def main():
     ap.add_argument("--no-verify", action="store_true",
                     help="skip the verification pass (drops faithfulness)")
     ap.add_argument("--label", default="answers")
+    ap.add_argument("--conflicts", action="store_true",
+                    help="re-enable conflict detection (off in the pipeline by "
+                         "default; use this to measure its cost)")
     args = ap.parse_args()
 
     questions = [json.loads(line) for line in QUESTIONS.open(encoding="utf-8") if line.strip()]
@@ -154,13 +196,16 @@ def main():
 
     rows = []
     for q in questions:
-        row = score_question(q, verify=not args.no_verify)
+        row = score_question(q, verify=not args.no_verify, conflicts=args.conflicts)
         rows.append(row)
 
-        if row["should_refuse"] or row["refused"]:
+        if row["should_refuse"] or row["gate_refused"]:
             mark = "PASS" if row.get("refused_correctly") else "FAIL"
-            state = "refused" if row["refused"] else "ANSWERED"
-            print(f"[{row['id']:3d}] {mark}  {state:8s} "
+            state = ("refused@gate" if row["gate_refused"]
+                     else "refused@model" if row.get("answer_refused")
+                     else "ANSWERED")
+            print(f"[{row['id']:3d}] {mark}  {state:13s} "
+                  f"vec={row['vector_top_score']:.3f} "
                   f"{row['latency_s']:5.1f}s  {row['question'][:44]}")
         else:
             print(f"[{row['id']:3d}] faith={_fmt(row.get('faithfulness'))} "
@@ -169,7 +214,7 @@ def main():
                   f"{row['route_kind']:9s} {row['latency_s']:5.1f}s  "
                   f"{row['question'][:44]}")
 
-    answered = [r for r in rows if not r["refused"] and not r["should_refuse"]]
+    answered = [r for r in rows if not r["gate_refused"] and not r["should_refuse"]]
     negatives = [r for r in rows if r["should_refuse"]]
 
     agg = {
@@ -185,6 +230,11 @@ def main():
     if negatives:
         agg["refusal_accuracy"] = mean([float(r.get("refused_correctly", False))
                                         for r in negatives])
+        # Split by mechanism: the gate is ~5x faster because generation never
+        # runs, so a shift from gate to model is a latency regression even when
+        # overall accuracy holds.
+        agg["refused_at_gate"] = sum(1 for r in negatives if r["gate_refused"])
+        agg["refused_at_model"] = sum(1 for r in negatives if r.get("answer_refused"))
 
     print(f"\n{'-' * 78}\nAGGREGATES:")
     for k, v in agg.items():

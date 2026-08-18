@@ -15,7 +15,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from src.memory import as_context
 from src.pipeline import _merge, build_prompt
+from src.roles import ROLE_BOOST, ROLE_PENALTY, adjust_score, classify_document, matches
 from src.verify import (
     _is_claim,
     cited_labels,
@@ -155,3 +157,81 @@ def test_prompt_with_conflicts_uses_citation_labels():
     # chunk indices are 0-based internally, citation labels are 1-based
     assert "[1] and [2] appear to contradict" in user["content"]
     assert "disagree" in system["content"]
+
+
+def test_history_precedes_sources_in_prompt():
+    """History is background for interpreting the question, not citable
+    material — if it lands after the sources the model cites prior answers
+    as though they were corpus documents."""
+    history = [{"question": "what is a Pod?", "answer": "A group of containers."}]
+    _, user = build_prompt("and how do they restart?", [chunk(1)], [], history)
+    assert user["content"].index("Earlier in this conversation") < \
+           user["content"].index("Sources:")
+
+
+# --- role conditioning ------------------------------------------------------
+
+@pytest.mark.parametrize("chunk_roles, user_role, expected", [
+    (["junior"], "junior", True),        # exact match
+    (["senior"], "junior", False),       # mismatch
+    (["junior", "senior"], "senior", True),
+    # "all" carries no audience signal, so it must not be boosted: it is half
+    # the corpus, and boosting it applies a near-uniform shift that reorders
+    # nothing.
+    (["all"], "junior", None),
+    (["all"], "senior", None),
+    (None, "junior", None),              # backfill hasn't run — leave alone
+    ([], "junior", None),
+    (["junior"], None, None),            # no role requested
+])
+def test_role_matching(chunk_roles, user_role, expected):
+    assert matches(chunk_roles, user_role) is expected
+
+
+def test_adjust_score_directions():
+    assert adjust_score(0.5, ["junior"], "junior") == pytest.approx(0.5 + ROLE_BOOST)
+    assert adjust_score(0.5, ["senior"], "junior") == pytest.approx(0.5 - ROLE_PENALTY)
+    assert adjust_score(0.5, ["all"], "junior") == 0.5
+    assert adjust_score(0.5, None, "junior") == 0.5
+
+
+def test_role_boost_cannot_outrank_a_clear_relevance_gap():
+    """The plan requires a boost, not a filter: a strongly relevant chunk for
+    the 'wrong' audience must still beat a weak one for the right audience."""
+    relevant_wrong_role = adjust_score(0.95, ["senior"], "junior")
+    weak_right_role = adjust_score(0.60, ["junior"], "junior")
+    assert relevant_wrong_role > weak_right_role
+
+
+def test_classify_document_falls_back_to_all(monkeypatch):
+    """A classification failure must not silently bias retrieval."""
+    monkeypatch.setattr("src.roles.chat_json", lambda *a, **k: None)
+    assert classify_document("x.md", "text") == ["all"]
+    monkeypatch.setattr("src.roles.chat_json", lambda *a, **k: {"roles": ["bogus"]})
+    assert classify_document("x.md", "text") == ["all"]
+
+
+def test_classify_document_collapses_both_roles_to_all():
+    """Tagged for every role says the same thing as "all"; storing it one way
+    keeps the match test simple."""
+    import src.roles as roles_mod
+    original = roles_mod.chat_json
+    roles_mod.chat_json = lambda *a, **k: {"roles": ["junior", "senior"]}
+    try:
+        assert classify_document("x.md", "text") == ["all"]
+    finally:
+        roles_mod.chat_json = original
+
+
+# --- conversation memory ----------------------------------------------------
+
+def test_as_context_renders_turns():
+    turns = [{"question": "what is a Pod?", "answer": "A group of containers."},
+             {"question": "how many?", "answer": "One or more."}]
+    rendered = as_context(turns)
+    assert "Earlier question: what is a Pod?" in rendered
+    assert "Earlier answer: One or more." in rendered
+
+
+def test_as_context_empty():
+    assert as_context([]) == ""

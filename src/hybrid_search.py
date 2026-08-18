@@ -46,7 +46,7 @@ text_hits AS (
     WHERE text_search @@ websearch_to_tsquery('english', %(q)s)
     LIMIT %(cand)s
 )
-SELECT c.id, c.source, c.section, c.text,
+SELECT c.id, c.source, c.section, c.text, c.roles,
        COALESCE(1.0 / (%(k)s + v.rank), 0) +
        COALESCE(1.0 / (%(k)s + t.rank), 0) AS rrf_score,
        v.rank AS vec_rank, t.rank AS txt_rank,
@@ -78,11 +78,14 @@ def hybrid_search(query: str, top_n: int = None, qvec: list[float] = None) -> li
         }).fetchall()
     return [
         {"id": r[0], "source": r[1], "section": r[2], "text": r[3],
-         "rrf_score": float(r[4]), "vec_rank": r[5], "txt_rank": r[6],
+         # None until src/backfill_roles.py has run; treated as "unknown
+         # audience" downstream, never as a mismatch.
+         "roles": r[4],
+         "rrf_score": float(r[5]), "vec_rank": r[6], "txt_rank": r[7],
          # NULL when the chunk was found by keyword only, i.e. it never
          # entered the vector top-CANDIDATES.
-         "vec_score": float(r[7]) if r[7] is not None else None,
-         "vec_top": float(r[8]) if r[8] is not None else 0.0}
+         "vec_score": float(r[8]) if r[8] is not None else None,
+         "vec_top": float(r[9]) if r[9] is not None else 0.0}
         for r in rows
     ]
 

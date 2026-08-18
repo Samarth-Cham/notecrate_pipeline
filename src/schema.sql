@@ -25,6 +25,7 @@ CREATE TABLE chunks (
     subsection       text,
     chunk_strategy   text,
     owner            text,
+    roles            text[],                 -- applicable audience; see src/roles.py
     ingested         date,
     n_tokens         int,
 

@@ -11,19 +11,53 @@ retrieval while the reranker was only reachable from a script.
 """
 
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.conflict import detect_conflicts
 from src.llm import chat
+from src.memory import as_context, recall, record_turn
 from src.rerank import rerank
 from src.router import route
 from src.verify import verify
 
 MAX_CONTEXT = 6      # chunks in the prompt; tokens are not the constraint, noise is
-NOISE_FLOOR = 0.57   # measured: best vector score for content NOT in the corpus
 STRONG = 0.65        # above this, answer confidently
+
+# Conflict detection is OFF by default. Not a tuning choice — the detector is
+# not working. Against eval/labels/conflicts.jsonl (51 labelled pairs),
+# precision is 0.00 at every threshold from 0.05 to 0.95, under both the
+# min-of-both-directions rule the code uses and the max rule it replaced. At
+# the shipped 0.60 it flags 14 pairs and all 14 are wrong, while all five
+# genuine corpus conflicts score below 0.02.
+#
+# The Week 4 conclusion that requiring bidirectional agreement fixed the
+# unrelated-text failure was drawn from 60 pairs. At 298 the failure is fully
+# present; 60 was too few to see it.
+#
+# Turning it on also switches generation to CONFLICT_SYSTEM, so a false alarm
+# makes the model hedge on sources that agree. Pass detect_conflicts=True to
+# re-enable once the detector is rebuilt.
+CONFLICT_DETECTION_ENABLED = False
+
+# Fitted against all 30 eval questions (vector top-1 cosine, post-routing):
+#   negatives   0.461, 0.566, 0.575, 0.689
+#   positives   0.589 (min), 0.687, 0.705, ...
+# 0.58 lands in the 0.575 -> 0.589 gap: catches 3 of 4 negatives and wrongly
+# refuses none of the 26 positives. The previous 0.57 sat *below* the firewall
+# question that defined it, so that question slipped through.
+#
+# The margin is 0.009 on a 30-question set — thin enough that this is tuned,
+# not proven. Re-fit it whenever the corpus changes; a new document near a
+# negative question's topic will move the boundary.
+#
+# The 4th negative (0.689) is a freshness question: on-topic for the corpus,
+# but the answer postdates the export. No similarity threshold can catch that
+# without refusing real questions. Generation handles it — see the refusal
+# discussion in eval/run_answer_eval.py.
+NOISE_FLOOR = 0.58
 
 SYSTEM = (
     "You are an assistant answering questions from a private document corpus. "
@@ -69,7 +103,8 @@ def _merge(result_lists: list[list[dict]], limit: int) -> list[dict]:
     return merged
 
 
-def build_prompt(query: str, chunks: list[dict], conflicts: list[dict]) -> list[dict]:
+def build_prompt(query: str, chunks: list[dict], conflicts: list[dict],
+                 history: list[dict] = None) -> list[dict]:
     # Label each chunk so the model can cite it. Numbered labels beat
     # filenames in the prompt: shorter, unambiguous, easy to force.
     context_blocks = []
@@ -80,7 +115,15 @@ def build_prompt(query: str, chunks: list[dict], conflicts: list[dict]) -> list[
 
     system = SYSTEM if not conflicts else f"{SYSTEM}\n\n{CONFLICT_SYSTEM}"
 
-    user = f"Sources:\n\n{context}\n\n---\n\n"
+    user = ""
+    # History goes BEFORE the sources: it is background for interpreting the
+    # question, not material to cite. Placing it after the sources invites the
+    # model to cite prior answers as though they were corpus documents.
+    if history:
+        user += (f"Earlier in this conversation:\n\n{as_context(history)}\n\n"
+                 "---\n\n")
+
+    user += f"Sources:\n\n{context}\n\n---\n\n"
     if conflicts:
         listed = "\n".join(
             f"- [{f['a'] + 1}] and [{f['b'] + 1}] appear to contradict each other."
@@ -96,13 +139,36 @@ def build_prompt(query: str, chunks: list[dict], conflicts: list[dict]) -> list[
 
 
 def answer_question(query: str, *, use_router: bool = True,
-                    verify_answer: bool = True) -> dict:
+                    verify_answer: bool = True, role: str = None,
+                    conversation_id: str = None,
+                    detect_conflicts_enabled: bool = CONFLICT_DETECTION_ENABLED) -> dict:
     """Run the full pipeline. Never raises on a low-confidence query —
-    returns `refused: True` so callers decide how to present it."""
-    routing = route(query) if use_router else {"kind": "simple", "sub_queries": [],
-                                               "queries": [query]}
+    returns `refused: True` so callers decide how to present it.
 
-    per_query = [rerank(q) for q in routing["queries"]]
+    `role` conditions reranking (see src/roles.py). In the plan's enterprise
+    version it comes from the authenticated identity rather than the caller;
+    this is the single place that has to change when auth lands.
+    """
+    # Per-stage timings (plan section 7: latency "tracked per-stage"). Cheap to
+    # collect and the only way to answer "why did that feel slow" without
+    # guessing — the expensive stage is rarely the one you assume.
+    timings: dict[str, float] = {}
+
+    def _timed(name, fn):
+        start = time.perf_counter()
+        try:
+            return fn()
+        finally:
+            timings[name] = round(time.perf_counter() - start, 2)
+
+    routing = _timed("route", lambda: route(query)) if use_router else {
+        "kind": "simple", "sub_queries": [], "queries": [query]}
+
+    history = _timed("memory_recall",
+                     lambda: recall(conversation_id, query)) if conversation_id else []
+
+    per_query = _timed("retrieve", lambda: [rerank(q, role=role)
+                                            for q in routing["queries"]])
     chunks = _merge(per_query, MAX_CONTEXT)
 
     # Refusal is gated on cosine similarity, not the reranker's logits: the
@@ -119,6 +185,9 @@ def answer_question(query: str, *, use_router: bool = True,
         "confidence": "weak",
         "sentences": [],
         "refused": False,
+        "role": role,
+        "history": history,
+        "timings": timings,
     }
 
     if not chunks or vec_top < NOISE_FLOOR:
@@ -129,11 +198,23 @@ def answer_question(query: str, *, use_router: bool = True,
         )
         return result
 
-    result["conflicts"] = detect_conflicts(chunks)
+    if detect_conflicts_enabled:
+        result["conflicts"] = _timed("conflict", lambda: detect_conflicts(chunks))
     result["confidence"] = "strong" if vec_top >= STRONG else "weak"
-    result["answer"] = chat(build_prompt(query, chunks, result["conflicts"]))
+    result["answer"] = _timed("generate", lambda: chat(
+        build_prompt(query, chunks, result["conflicts"], history)))
 
     if verify_answer:
-        result["sentences"] = verify(result["answer"], chunks)
+        result["sentences"] = _timed("verify",
+                                     lambda: verify(result["answer"], chunks))
+
+    if conversation_id:
+        # Recorded only on a successful answer. Storing refusals would let a
+        # question the corpus cannot answer come back as "context" for the
+        # next one and pollute the recall.
+        _timed("memory_record",
+               lambda: record_turn(conversation_id, query, result["answer"]))
+
+    return result
 
     return result

@@ -27,6 +27,27 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.hybrid_search import hybrid_search
 from src.nli import score as nli_score
 
+# Measured against eval/labels/grounding.jsonl (54 hand-labelled sentences)
+# by eval/calibrate.py:
+#
+#   current (0.55, 0.20, 0.50)   tag accuracy 0.537, macro-F1 0.355
+#   best the sweep can find      tag accuracy 0.630, macro-F1 0.420
+#
+# 0.55 is a reasonable cut for GROUNDED and is kept. INFERRED is not, but
+# moving it will not help: entailment separates grounded from inferred with
+# AUC 0.637, and their medians are 0.978 and 0.956 — the two distributions
+# overlap almost completely, so no cut between them works. calibrate.py flags
+# every configuration it finds, this one included, as DEGENERATE: it never
+# gets `inferred` right. The three-way tag is really a two-way decision with
+# a third label that never lands, and separating grounded from inferred needs
+# a second signal rather than a better threshold on this one.
+#
+# Left unchanged pending that decision, because retuning within a broken
+# parameterisation would only move which sentences are wrong. Other causes,
+# written up in eval/labels/README.md: premise truncation at MAX_CHARS, the
+# contradiction max() below, and attribution-shaped sentences induced by
+# CONFLICT_SYSTEM — which fire only because conflict detection has 0.00
+# precision (see src/conflict.py).
 GROUNDED_THRESHOLD = 0.55    # entailment probability
 INFERRED_THRESHOLD = 0.20    # below this, nothing meaningfully supports it
 CONTRADICTED_THRESHOLD = 0.50
@@ -50,10 +71,26 @@ ATTRIBUTION_RE = re.compile(
 # attributing each position to its source is exactly what it was asked to do.
 # Left in place, the reported claim is buried inside a claim about the corpus,
 # which nothing in the corpus entails.
+_REPORTING_VERB = (r"(?:states?|says?|notes?|describes?|mentions?|indicates?|"
+                   r"explains?|claims?|shows?|suggests?)")
+
+# "that" is optional: the generator writes both "[2] claims that X" and
+# "[2] claims X", and the second form left a dangling verb at the front of
+# the hypothesis ("claims init containers can contain utilities").
 SOURCE_VERB_RE = re.compile(
-    r"(?:\[\d+(?:\s*,\s*\d+)*\]\s*)+(?:\w+\s+)?"
-    r"(?:states?|says?|notes?|describes?|mentions?|indicates?|explains?|"
-    r"claims?|shows?)\s+that\s+",
+    r"(?:\[\d+(?:\s*,\s*\d+)*\]\s*)+(?:\w+\s+)?" + _REPORTING_VERB
+    + r"(?:\s+that)?\s+",
+    re.IGNORECASE,
+)
+
+# The same shape with no citation marker at all: "another source suggests
+# that X", "One source states that X". The generator writes these instead of
+# "[3] suggests that X" often enough to matter — 5 of the 54 labelled
+# sentences — and without a marker to anchor on, the pattern above misses
+# them entirely and the claim stays wrapped in a statement about the corpus.
+NAMED_SOURCE_RE = re.compile(
+    r"\b(?:however,\s+)?(?:one|another|some|other|a|the)\s+sources?\s+"
+    + _REPORTING_VERB + r"\s+that\s+",
     re.IGNORECASE,
 )
 
@@ -86,6 +123,7 @@ def strip_citations(sentence: str) -> str:
     0.744 to 0.083 purely from that one character. Re-normalise before scoring.
     """
     text = SOURCE_VERB_RE.sub("", sentence)
+    text = NAMED_SOURCE_RE.sub("", text)
     text = ATTRIBUTION_RE.sub("", text)
     text = CITATION_RE.sub("", text)
     text = re.sub(r"^\s*(?:[-*+•]|\d+[.)]|#{1,6})\s+", "", text)   # list/heading markers
@@ -171,7 +209,17 @@ def verify(answer: str, chunks: list[dict], *, retrieve_k: int = RETRIEVE_K) -> 
 
         best = max(range(len(window)), key=lambda i: window[i]["entailment"])
         entail = window[best]["entailment"]
-        contra = max(s["contradiction"] for s in window)
+        # Contradiction is read from the SAME premise that best supports the
+        # claim, not from a max over every retrieved chunk.
+        #
+        # The max was letting any single retrieved chunk veto a correct tag,
+        # and an unrelated chunk scores contradiction ~1.00 for the reasons in
+        # conflict.py. "The scheduler checks taints when making scheduling
+        # decisions" is quoted verbatim from the corpus and still came out
+        # `uncertain` (e=0.44, c=1.00) because two unrelated premises objected.
+        # A premise that both supports the claim best AND contradicts it is
+        # genuinely ambiguous; an off-topic chunk's opinion is not evidence.
+        contra = window[best]["contradiction"]
 
         if contra >= CONTRADICTED_THRESHOLD and contra > entail:
             tag = "uncertain"

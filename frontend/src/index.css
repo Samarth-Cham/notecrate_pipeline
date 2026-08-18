@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+@theme {
+  --color-surface: oklch(99% 0.004 265);
+  --color-surface-raised: oklch(100% 0 0);
+  --color-ink: oklch(25% 0.02 265);
+  --color-ink-muted: oklch(52% 0.02 265);
+  --color-line: oklch(91% 0.006 265);
+
+  /* Grounding tags. Hue carries the meaning, so they stay distinguishable
+     when the badge text is small. */
+  --color-grounded: oklch(58% 0.13 155);
+  --color-inferred: oklch(65% 0.13 75);
+  --color-uncertain: oklch(58% 0.16 25);
+}
+
+@media (prefers-color-scheme: dark) {
+  @theme {
+    --color-surface: oklch(21% 0.015 265);
+    --color-surface-raised: oklch(25% 0.017 265);
+    --color-ink: oklch(94% 0.005 265);
+    --color-ink-muted: oklch(70% 0.015 265);
+    --color-line: oklch(33% 0.015 265);
+
+    --color-grounded: oklch(72% 0.14 155);
+    --color-inferred: oklch(78% 0.13 75);
+    --color-uncertain: oklch(70% 0.15 25);
+  }
+}
+
+html {
+  color-scheme: light dark;
+}
+
+body {
+  background: var(--color-surface);
+  color: var(--color-ink);
+}

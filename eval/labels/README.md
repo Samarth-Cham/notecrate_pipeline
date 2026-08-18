@@ -9,11 +9,12 @@ Both Week 4 detectors shipped with guessed constants. This directory holds the
 labels that turn them into measured ones.
 
 ```
-answers.jsonl     frozen generated answers — the grounding substrate
-conflicts.jsonl   chunk pairs      -> conflict | agree | unrelated
-grounding.jsonl   answer sentences -> grounded | inferred | uncertain
-_scores.json      cached NLI scores (derived; safe to delete, slow to rebuild)
-_pool_*.jsonl     unlabelled candidates from harvest_labels.py (gitignored)
+answers.jsonl        frozen generated answers — the grounding substrate
+conflicts.jsonl      chunk pairs      -> conflict | agree | unrelated
+grounding.jsonl      answer sentences -> grounded | inferred | uncertain
+build_*.py           regenerate the two label files (--force; see below)
+_scores.json         cached NLI scores (derived; safe to delete, slow to rebuild)
+_pool_*.jsonl        unlabelled candidates from harvest_labels.py (gitignored)
 ```
 
 ```bash
@@ -21,6 +22,84 @@ python eval/harvest_labels.py conflicts    # rebuild the candidate pools
 python eval/harvest_labels.py answers
 python eval/calibrate.py                   # sweep both sets, print curves
 ```
+
+The `.jsonl` files are the source of truth. `build_conflicts.py` and
+`build_grounding.py` are how they were first assembled — they pull chunk text
+from Postgres so each row is self-contained — and both refuse to overwrite an
+existing file without `--force`, so a rebuild cannot quietly discard a
+correction someone made by hand.
+
+## What the sweep found
+
+Short version: **neither detector is merely miscalibrated.** The conflict
+threshold cannot be fixed by choosing a different number, and the grounding
+thresholds were already close to their achievable optimum.
+
+**Conflicts — precision 0.00 at every threshold from 0.05 to 0.95.**
+Not one corpus-origin conflict outranks a single negative. At the shipped
+0.60, 14 of 51 pairs are flagged and all 14 are wrong: unrelated topic pairs
+(a QuickSort trace against an FSM truth table) and same-topic pairs that
+plainly agree (`sidecar-containers.md` against `init-containers.md`).
+Meanwhile all five real conflicts in the set score below 0.02 — including the
+two that retrieval genuinely surfaced together for the question that asks
+about them. The `min`-of-both-directions rule in `conflict.py` does not fix
+the unrelated-text failure its docstring says it fixed; measured over 298
+retrieved pairs rather than 60, the failure is fully present.
+
+**Grounding — tag accuracy 0.537 at the shipped thresholds; 0.630 at the
+best setting found, and that setting is degenerate.**
+
+The first thing the label set produced was not a threshold at all. Two
+attribution-stripping bugs showed up in the `note` fields — `strip_citations`
+only removed `[2] claims that X` when the word "that" was present, and never
+handled the unmarked `another source suggests that X` — leaving nine
+hypotheses mangled or wrapped in a claim about the corpus. Fixing those
+regexes moved the numbers more than any threshold does:
+
+| | before the regex fix | after |
+|---|---|---|
+| accuracy at shipped thresholds | 0.500 | **0.537** |
+| best accuracy the sweep can reach | 0.519 | **0.630** |
+| AUC, `grounded` vs `uncertain` | 0.598 | **0.724** |
+| `grounded` sentences scoring < 0.05 | 11 of 35 | **6 of 35** |
+
+`GROUNDED_THRESHOLD = 0.55` remains a reasonable cut. What does not work is
+the middle tag. Entailment separates the classes like this:
+
+```
+grounded vs uncertain   AUC 0.724
+grounded vs inferred    AUC 0.637   <-- the boundary INFERRED_THRESHOLD draws
+inferred vs uncertain   AUC 0.548
+```
+
+Median entailment is 0.978 for `grounded` and 0.956 for `inferred`. The two
+distributions sit on top of each other, so no cut between them can work, and
+`calibrate.py` flags every configuration it finds — including the shipped one
+— as **DEGENERATE: gets no inferred, never correctly**. The three-way tag the
+UI renders is really a two-way decision with a third label that never lands.
+Splitting `grounded` from `inferred` needs a second signal, not a better cut
+point on this one.
+
+Two further causes of wrong tags remain, both visible in the `note` fields
+and neither fixable by tuning:
+
+1. *Truncation.* `MAX_CHARS = 900` cuts the supporting sentence out of long
+   chunks before the model sees it. One labelled row is grounded by text
+   sitting near character 1,000 of its premise.
+2. *The contradiction veto takes a max over all premises*, so a single
+   unrelated retrieved chunk vetoes a correct tag. "The scheduler checks
+   taints, not node conditions, when it makes scheduling decisions" is quoted
+   verbatim from the corpus and comes out `uncertain` because two unrelated
+   premises score contradiction 1.00. `calibrate.py` measures the alternative
+   (score contradiction on the best-entailing premise only); it wins, but by
+   little enough that 54 sentences cannot justify the change on its own.
+
+And the two detectors fail *together*: `CONFLICT_SYSTEM` is what makes the
+generator write attribution-shaped sentences, and it is switched on by
+conflicts that are all false positives. 11 of 54 sentences have that shape
+and score worst as a group (accuracy 0.455 against 0.674 for plain
+assertions). Fixing conflict detection removes the sentences that grounding
+handles worst.
 
 ## Who labelled this
 

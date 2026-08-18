@@ -7,4 +7,17 @@ data/chunks/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 docs/*
+ingestions/*
 .venv/
+.claude/*
+
+# Frontend build artifacts. package-lock.json IS committed — the Dockerfile
+# runs `npm ci`, which requires it.
+frontend/node_modules/
+frontend/dist/
+
+# Regenerable candidate pools for the label set (eval/harvest_labels.py).
+# The labels themselves — conflicts.jsonl, grounding.jsonl — and the frozen
+# answers.jsonl they are attached to ARE committed: hand-made, and answers
+# cannot be reproduced because generation runs at temperature 0.2.
+eval/labels/_pool_*.jsonl

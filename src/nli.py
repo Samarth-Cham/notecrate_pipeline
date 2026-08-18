@@ -12,13 +12,24 @@ Both live behind this module so the ~700MB model is loaded once per
 process, and lazily: importing the retrieval path should not pay for it.
 """
 
+import re
+
 import numpy as np
 from sentence_transformers import CrossEncoder
 
 NLI_MODEL = "cross-encoder/nli-deberta-v3-base"
 
-# NLI models are trained on sentence-length pairs. Feeding a full 1000-token
-# chunk degrades the signal badly, so premises get truncated.
+# Premise length. Not a technical limit — the model accepts 512 tokens
+# (~2000 chars) — but a quality one. Swept against eval/labels/grounding.jsonl:
+#
+#   MAX_CHARS =  900   tag accuracy 0.500
+#   MAX_CHARS = 1200   tag accuracy 0.426
+#   MAX_CHARS = 1800   tag accuracy 0.389
+#
+# Monotonic, and it holds well inside the token limit, so this is the model
+# losing the thread on long premises rather than anything getting truncated
+# away. Extra context dilutes the entailment signal faster than it adds
+# evidence. Keep premises short.
 MAX_CHARS = 900
 
 # Checkpoints spell these differently ("contradiction" vs "contradict").
@@ -56,6 +67,35 @@ def _softmax(x: np.ndarray) -> np.ndarray:
     return e / e.sum(axis=-1, keepdims=True)
 
 
+_WORD_RE = re.compile(r"[a-z]{4,}")
+
+
+def _best_window(premise: str, hypothesis: str) -> str:
+    """The MAX_CHARS slice of `premise` most likely to contain the evidence.
+
+    47% of chunks are longer than MAX_CHARS, and taking the first slice
+    silently drops the supporting sentence whenever it sits later in the
+    chunk. Since long premises score worse (see MAX_CHARS above), the answer
+    is to keep the premise short but choose WHICH short piece — by content-word
+    overlap with the hypothesis, which costs nothing and needs no model.
+    """
+    if len(premise) <= MAX_CHARS:
+        return premise
+
+    wanted = set(_WORD_RE.findall(hypothesis.lower()))
+    if not wanted:
+        return premise[:MAX_CHARS]
+
+    step = MAX_CHARS // 2      # 50% overlap, so evidence can't fall on a seam
+    best, best_overlap = premise[:MAX_CHARS], -1
+    for start in range(0, max(len(premise) - MAX_CHARS, 0) + step, step):
+        window = premise[start:start + MAX_CHARS]
+        overlap = len(wanted & set(_WORD_RE.findall(window.lower())))
+        if overlap > best_overlap:
+            best, best_overlap = window, overlap
+    return best
+
+
 def score(pairs: list[tuple[str, str]]) -> list[dict[str, float]]:
     """Classify (premise, hypothesis) pairs.
 
@@ -66,7 +106,7 @@ def score(pairs: list[tuple[str, str]]) -> list[dict[str, float]]:
         return []
 
     model = _load()
-    truncated = [(p[:MAX_CHARS], h[:MAX_CHARS]) for p, h in pairs]
+    truncated = [(_best_window(p, h), h[:MAX_CHARS]) for p, h in pairs]
     probs = _softmax(np.asarray(model.predict(truncated)))
 
     return [{name: float(row[col]) for name, col in _columns.items()}

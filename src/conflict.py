@@ -18,13 +18,34 @@ proved unusable: measured over 60 chunk pairs from the eval set, it flagged
 unrelated chat transcript full of PowerShell. NLI assumes its two inputs
 discuss the same proposition; hand it unrelated text and it returns
 confident nonsense, but usually in one direction only. Requiring agreement
-dropped those to 0.04 while a genuine contradiction stayed at 1.00.
+looked like it fixed that — on those 60 pairs.
 
-CALIBRATION IS NOT FINISHED. The remaining flagged pairs are same-topic and
-plausible but unlabelled, so the precision of this detector is unknown. The
-project plan calls for a hand-labelled set of known-conflicting document
-pairs to tune CONTRADICTION_THRESHOLD against; until that exists, treat the
-disagreement panel as provisional.
+IT DOES NOT. eval/labels/conflicts.jsonl now exists (51 hand-labelled pairs,
+drawn from the 298 the reranker actually produces across the eval set) and
+eval/calibrate.py sweeps CONTRADICTION_THRESHOLD against it:
+
+    precision is 0.00 at every threshold from 0.05 to 0.95.
+
+Not one real conflict outranks a single negative. At the 0.60 below, 14 pairs
+are flagged and all 14 are wrong — including a QuickSort trace against a
+finite-state-machine truth table, scored 1.00 in BOTH directions. The
+unrelated-text failure survives the min() rule at the larger sample size; 60
+pairs was too few to see it.
+
+The misses are worse than the false alarms. All five genuine corpus conflicts
+score below 0.02, among them the two that retrieval really does surface
+together: a chat that states India's gold import duty is ~6% next to the
+chunks recording the May 2026 rise to 15%, and one chunk recommending
+900-token chunks next to another recording 600 as settled. On that second
+one the generator went on to assert 900/150 as the decision, which is exactly
+the silent side-picking this module exists to prevent.
+
+So the threshold is not the problem and no value of it is defensible. Until
+the detector is rebuilt, the disagreement panel should be considered
+non-functional rather than provisional — and note that a false positive is
+not free: pipeline.py switches to CONFLICT_SYSTEM whenever this returns
+anything, which measurably degrades the verification pass downstream (see
+eval/labels/README.md).
 """
 
 import sys

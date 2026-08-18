@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from sentence_transformers import CrossEncoder
 
 from src.hybrid_search import hybrid_search
+from src.roles import adjust_score
 
 RERANK_MODEL = "BAAI/bge-reranker-base"
 CANDIDATES = 20   # how many hybrid results to rerank
@@ -42,7 +43,8 @@ def _load():
     return _model
 
 
-def rerank(query: str, top_n: int = TOP_N, qvec: list[float] = None) -> list[dict]:
+def rerank(query: str, top_n: int = TOP_N, qvec: list[float] = None,
+           role: str = None) -> list[dict]:
     # Widen the hybrid net: it returns 5 by default, we want CANDIDATES to score.
     candidates = hybrid_search(query, top_n=CANDIDATES, qvec=qvec)
 
@@ -54,7 +56,12 @@ def rerank(query: str, top_n: int = TOP_N, qvec: list[float] = None) -> list[dic
     scores = _load().predict(pairs)         # numpy array of relevance logits
 
     for c, s in zip(candidates, scores):
-        c["rerank_score"] = float(s)
+        c["relevance_score"] = float(s)
+        # Role conditioning happens HERE — after scoring, before the cut — so
+        # a boosted chunk can actually enter the top-n. Applying it after the
+        # cut would only reorder chunks that already made it, which is not the
+        # feature. Both scores are kept so the effect stays auditable.
+        c["rerank_score"] = adjust_score(c["relevance_score"], c.get("roles"), role)
 
     candidates.sort(key=lambda c: c["rerank_score"], reverse=True)
     return candidates[:top_n]

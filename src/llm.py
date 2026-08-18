@@ -7,6 +7,7 @@ model names and endpoints live in exactly one place.
 
 import json
 import os
+import sys
 from pathlib import Path
 
 import requests
@@ -20,9 +21,21 @@ LLM_MODEL = os.environ["LLM_MODEL"]
 
 TIMEOUT = 120   # generation on CPU is slow; embeddings return in well under this
 
+if "//localhost" in OLLAMA:
+    # Ollama binds IPv4 only. On Windows "localhost" resolves to ::1 first, so
+    # every call pays ~2s waiting for that to fail before retrying IPv4 —
+    # measured 2.10s vs 0.06s per request. One question makes ~9 calls, so
+    # this is ~18s of pure waiting. Loud, because it looks like a slow model.
+    print(f"WARNING: OLLAMA_URL={OLLAMA} — use 127.0.0.1 instead of localhost; "
+          "see .env.example", file=sys.stderr)
+
+# One pooled session: keep-alive removes a TCP handshake per request, and
+# there are a lot of requests per question.
+_session = requests.Session()
+
 
 def embed(text: str) -> list[float]:
-    r = requests.post(f"{OLLAMA}/api/embeddings",
+    r = _session.post(f"{OLLAMA}/api/embeddings",
                       json={"model": EMBED_MODEL, "prompt": text},
                       timeout=TIMEOUT)
     r.raise_for_status()
@@ -41,7 +54,7 @@ def chat(messages: list[dict], *, temperature: float = 0.2,
     if json_mode:
         payload["format"] = "json"
 
-    r = requests.post(f"{OLLAMA}/api/chat", json=payload, timeout=TIMEOUT)
+    r = _session.post(f"{OLLAMA}/api/chat", json=payload, timeout=TIMEOUT)
     r.raise_for_status()
     return r.json()["message"]["content"]
 

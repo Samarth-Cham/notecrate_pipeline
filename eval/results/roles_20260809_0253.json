@@ -1,0 +1,149 @@
+{
+  "mean_overlap": 0.712,
+  "results": [
+    {
+      "query": "how do I set up a github repo",
+      "overlap": 0.25,
+      "junior_sources": [
+        "chat_Push_project_to_GitHub.md",
+        "chat_GitHub_Authentication_Fix.md",
+        "chat_Git_Repo_Setup_Guide.md",
+        "chat_Data_chunking_textbook_recommendations.md",
+        "chat_Data_chunking_textbook_recommendations.md"
+      ],
+      "senior_sources": [
+        "chat_Data_chunking_textbook_recommendations.md",
+        "chat_Data_chunking_textbook_recommendations.md",
+        "chat_Data_chunking_textbook_recommendations.md",
+        "chat_Data_chunking_textbook_recommendations.md",
+        "chat_Data_chunking_textbook_recommendations.md"
+      ]
+    },
+    {
+      "query": "how does garbage collection work",
+      "overlap": 0.667,
+      "junior_sources": [
+        "pdf_Objects In Kubernetes _ Kubernetes.md",
+        "garbage-collection.md",
+        "garbage-collection.md",
+        "garbage-collection.md",
+        "pdf_Objects In Kubernetes _ Kubernetes.md"
+      ],
+      "senior_sources": [
+        "garbage-collection.md",
+        "garbage-collection.md",
+        "garbage-collection.md",
+        "garbage-collection.md",
+        "pdf_Objects In Kubernetes _ Kubernetes.md"
+      ]
+    },
+    {
+      "query": "how do taints and tolerations work",
+      "overlap": 0.667,
+      "junior_sources": [
+        "taint-and-toleration.md",
+        "taint-and-toleration.md",
+        "advanced-pod-config.md",
+        "daemonset.md",
+        "chat_Red-Black_Tree_Validation.md"
+      ],
+      "senior_sources": [
+        "taint-and-toleration.md",
+        "taint-and-toleration.md",
+        "advanced-pod-config.md",
+        "admission-webhooks-good-practices.md",
+        "daemonset.md"
+      ]
+    },
+    {
+      "query": "how do I set up React on Windows",
+      "overlap": 1.0,
+      "junior_sources": [
+        "chat_React_JS_Setup_Windows.md",
+        "chat_React_JS_Setup_Windows.md",
+        "chat_React_JS_Setup_Windows.md",
+        "chat_React_JS_Setup_Windows.md",
+        "chat_React_JS_Setup_Windows.md"
+      ],
+      "senior_sources": [
+        "chat_React_JS_Setup_Windows.md",
+        "chat_React_JS_Setup_Windows.md",
+        "chat_React_JS_Setup_Windows.md",
+        "chat_React_JS_Setup_Windows.md",
+        "chat_React_JS_Setup_Windows.md"
+      ]
+    },
+    {
+      "query": "how does the scheduler assign pods to nodes",
+      "overlap": 0.111,
+      "junior_sources": [
+        "manage-resources-containers.md",
+        "taint-and-toleration.md",
+        "daemonset.md",
+        "runtime-class.md",
+        "scheduling-framework.md"
+      ],
+      "senior_sources": [
+        "advanced-pod-config.md",
+        "scheduler-perf-tuning.md",
+        "gang-scheduling.md",
+        "scheduler-perf-tuning.md",
+        "manage-resources-containers.md"
+      ]
+    },
+    {
+      "query": "what is a ConfigMap",
+      "overlap": 1.0,
+      "junior_sources": [
+        "configmap.md",
+        "configmap.md",
+        "configmap.md",
+        "configmap.md",
+        "configmap.md"
+      ],
+      "senior_sources": [
+        "configmap.md",
+        "configmap.md",
+        "configmap.md",
+        "configmap.md",
+        "configmap.md"
+      ]
+    },
+    {
+      "query": "how does quick sort work",
+      "overlap": 1.0,
+      "junior_sources": [
+        "chat_QuickSort_pivot_swap.md",
+        "chat_QuickSort_pivot_swap.md",
+        "chat_QuickSort_pivot_swap.md",
+        "chat_Recursive_permutation_method.md",
+        "chat_Recursive_permutation_method.md"
+      ],
+      "senior_sources": [
+        "chat_Recursive_permutation_method.md",
+        "chat_Recursive_permutation_method.md",
+        "chat_QuickSort_pivot_swap.md",
+        "chat_QuickSort_pivot_swap.md",
+        "chat_QuickSort_pivot_swap.md"
+      ]
+    },
+    {
+      "query": "how do init containers work",
+      "overlap": 1.0,
+      "junior_sources": [
+        "init-containers.md",
+        "init-containers.md",
+        "init-containers.md",
+        "init-containers.md",
+        "init-containers.md"
+      ],
+      "senior_sources": [
+        "init-containers.md",
+        "init-containers.md",
+        "init-containers.md",
+        "init-containers.md",
+        "init-containers.md"
+      ]
+    }
+  ]
+}
