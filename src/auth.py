@@ -27,6 +27,7 @@ from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from src.permissions import PUBLIC, SCOPES
 from src.roles import ROLES
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
@@ -45,6 +46,9 @@ CREATE TABLE IF NOT EXISTS users (
     username      text PRIMARY KEY,
     password_hash text NOT NULL,
     role          text NOT NULL,
+    -- Access control, independent of `role`. See src/permissions.py: role
+    -- decides ranking, scopes decide visibility.
+    scopes        text[] NOT NULL DEFAULT ARRAY[]::text[],
     created_at    timestamptz NOT NULL DEFAULT now()
 );
 """
@@ -92,25 +96,32 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 # --- tokens ------------------------------------------------------------------
 
-def create_token(username: str, role: str) -> str:
-    """Sign a token carrying the identity and its role."""
+def create_token(username: str, role: str, scopes: list[str] | None = None) -> str:
+    """Sign a token carrying the identity, its role, and its permission scopes."""
     if role not in ROLES:
         raise AuthError(f"unknown role {role!r}")
+    unknown = set(scopes or []) - set(SCOPES)
+    if unknown:
+        raise AuthError(f"unknown scopes {sorted(unknown)}")
     now = datetime.now(timezone.utc)
     return jwt.encode(
-        {"sub": username, "role": role, "iat": now, "exp": now + TOKEN_TTL},
+        {"sub": username, "role": role, "scopes": list(scopes or []),
+         "iat": now, "exp": now + TOKEN_TTL},
         _require_secret(),
         algorithm=ALGORITHM,
     )
 
 
 def decode_token(token: str) -> dict:
-    """Validate a token and return {"username", "role"}.
+    """Validate a token and return {"username", "role", "scopes"}.
 
     Signature and expiry are checked by PyJWT. The role is re-validated here
     as well: a claim is only trustworthy to the extent the value is one we
     recognise, and an unknown role silently disabling the boost would be a
     quiet failure rather than a loud one.
+
+    Unrecognised scopes are dropped rather than rejected, so a stale claim
+    narrows access instead of widening it or locking the user out entirely.
     """
     try:
         claims = jwt.decode(token, _require_secret(), algorithms=[ALGORITHM])
@@ -122,13 +133,19 @@ def decode_token(token: str) -> dict:
     username, role = claims.get("sub"), claims.get("role")
     if not username or role not in ROLES:
         raise AuthError("token is missing a usable identity or role")
-    return {"username": username, "role": role}
+
+    raw_scopes = claims.get("scopes")
+    scopes = [s for s in raw_scopes if s in SCOPES] if isinstance(raw_scopes, list) else []
+    return {"username": username, "role": role, "scopes": scopes}
 
 
 # --- user store --------------------------------------------------------------
 
 def ensure_schema(conn) -> None:
     conn.execute(SCHEMA)
+    # Existing installs predate the scopes column.
+    conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS scopes text[] "
+                 "NOT NULL DEFAULT ARRAY[]::text[]")
     conn.commit()
 
 
@@ -141,7 +158,8 @@ def authenticate(username: str, password: str) -> dict | None:
     with psycopg.connect(DB_URL) as conn:
         ensure_schema(conn)
         row = conn.execute(
-            "SELECT username, password_hash, role FROM users WHERE username = %s",
+            "SELECT username, password_hash, role, scopes FROM users "
+            "WHERE username = %s",
             (username,),
         ).fetchone()
 
@@ -153,26 +171,40 @@ def authenticate(username: str, password: str) -> dict | None:
 
     if not verify_password(password, row[1]):
         return None
-    return {"username": row[0], "role": row[2]}
+    return {"username": row[0], "role": row[2], "scopes": list(row[3] or [])}
 
 
-def upsert_user(username: str, password: str, role: str) -> None:
+def upsert_user(username: str, password: str, role: str,
+                scopes: list[str] | None = None) -> None:
     if role not in ROLES:
         raise AuthError(f"unknown role {role!r}; expected one of {list(ROLES)}")
+    scopes = list(scopes) if scopes is not None else [PUBLIC]
+    unknown = set(scopes) - set(SCOPES)
+    if unknown:
+        raise AuthError(f"unknown scopes {sorted(unknown)}; expected {list(SCOPES)}")
     with psycopg.connect(DB_URL) as conn:
         ensure_schema(conn)
         conn.execute(
-            "INSERT INTO users (username, password_hash, role) VALUES (%s, %s, %s) "
+            "INSERT INTO users (username, password_hash, role, scopes) "
+            "VALUES (%s, %s, %s, %s) "
             "ON CONFLICT (username) DO UPDATE SET password_hash = EXCLUDED.password_hash, "
-            "role = EXCLUDED.role",
-            (username, hash_password(password), role),
+            "role = EXCLUDED.role, scopes = EXCLUDED.scopes",
+            (username, hash_password(password), role, scopes),
         )
         conn.commit()
 
 
 # Demo accounts. Passwords come from the environment so this file never
 # contains a working credential; the seed command refuses to invent one.
-DEMO_USERS = [("jamie", "junior"), ("sam", "senior")]
+#
+# Role and scopes are deliberately NOT correlated: jamie is junior with access
+# to public docs only, sam is senior and may also read the private chat
+# transcripts. Seniority and clearance are different axes, and wiring them
+# together in the demo would teach exactly the wrong lesson.
+DEMO_USERS = [
+    ("jamie", "junior", [PUBLIC]),
+    ("sam", "senior", list(SCOPES)),
+]
 
 
 def seed() -> None:
@@ -183,9 +215,9 @@ def seed() -> None:
             "these are local demo accounts, but a default password committed "
             "to a repo is how demo accounts end up in production."
         )
-    for username, role in DEMO_USERS:
-        upsert_user(username, password, role)
-        print(f"  seeded {username:8s} role={role}")
+    for username, role, scopes in DEMO_USERS:
+        upsert_user(username, password, role, scopes)
+        print(f"  seeded {username:8s} role={role:7s} scopes={scopes}")
 
 
 if __name__ == "__main__":

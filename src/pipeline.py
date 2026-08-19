@@ -42,22 +42,32 @@ STRONG = 0.65        # above this, answer confidently
 # re-enable once the detector is rebuilt.
 CONFLICT_DETECTION_ENABLED = False
 
-# Fitted against all 30 eval questions (vector top-1 cosine, post-routing):
-#   negatives   0.461, 0.566, 0.575, 0.689
-#   positives   0.589 (min), 0.687, 0.705, ...
-# 0.58 lands in the 0.575 -> 0.589 gap: catches 3 of 4 negatives and wrongly
-# refuses none of the 26 positives. The previous 0.57 sat *below* the firewall
-# question that defined it, so that question slipped through.
+# Re-fitted after adding the nomic task prefixes (src/llm.py), which shifted
+# every cosine score upward. Measured on all 30 eval questions (vector top-1,
+# post-routing):
+#   negatives   0.562, 0.651, 0.678, 0.708
+#   positives   0.704 (min), 0.712, 0.713, 0.724, ...
 #
-# The margin is 0.009 on a 30-question set — thin enough that this is tuned,
-# not proven. Re-fit it whenever the corpus changes; a new document near a
-# negative question's topic will move the boundary.
+# 0.69 sits in the 0.678 -> 0.704 gap: catches 3 of 4 negatives, wrongly
+# refuses none of the 26 positives.
 #
-# The 4th negative (0.689) is a freshness question: on-topic for the corpus,
+# The prefixes did more than move the numbers — they SEPARATED the classes.
+# The margin between the highest caught negative and the lowest positive went
+# from 0.009 to 0.026, roughly 3x. Under the old unprefixed embeddings the two
+# classes interleaved: "How do I set up Ollama?" scored 0.569 as a positive
+# while the firewall negative scored 0.575 above it, so no threshold could
+# separate them. It now scores 0.704, and is question 30 in the eval set
+# precisely so that stays true.
+#
+# Still tuned rather than proven — 30 questions, one corpus. Re-fit whenever
+# the corpus or the embedding scheme changes; changing either invalidates
+# this number, and src/reembed.py prints a reminder for exactly that reason.
+#
+# The 4th negative (0.708) is a freshness question: on-topic for the corpus,
 # but the answer postdates the export. No similarity threshold can catch that
 # without refusing real questions. Generation handles it — see the refusal
 # discussion in eval/run_answer_eval.py.
-NOISE_FLOOR = 0.58
+NOISE_FLOOR = 0.69
 
 SYSTEM = (
     "You are an assistant answering questions from a private document corpus. "
@@ -138,16 +148,20 @@ def build_prompt(query: str, chunks: list[dict], conflicts: list[dict],
     ]
 
 
-def answer_question(query: str, *, use_router: bool = True,
+def answer_question(query: str, *, scopes, use_router: bool = True,
                     verify_answer: bool = True, role: str = None,
                     conversation_id: str = None,
                     detect_conflicts_enabled: bool = CONFLICT_DETECTION_ENABLED) -> dict:
     """Run the full pipeline. Never raises on a low-confidence query —
     returns `refused: True` so callers decide how to present it.
 
-    `role` conditions reranking (see src/roles.py). In the plan's enterprise
-    version it comes from the authenticated identity rather than the caller;
-    this is the single place that has to change when auth lands.
+    `scopes` is REQUIRED and has no default. It is the permission filter, and
+    a default would mean a new call site could silently retrieve the whole
+    corpus. Local tools pass permissions.UNRESTRICTED explicitly; the API
+    passes the scopes from the caller's token. See src/permissions.py.
+
+    `role` conditions reranking (see src/roles.py) and is a relevance signal
+    only — it is NOT access control and must never be relied on as such.
     """
     # Per-stage timings (plan section 7: latency "tracked per-stage"). Cheap to
     # collect and the only way to answer "why did that feel slow" without
@@ -167,7 +181,7 @@ def answer_question(query: str, *, use_router: bool = True,
     history = _timed("memory_recall",
                      lambda: recall(conversation_id, query)) if conversation_id else []
 
-    per_query = _timed("retrieve", lambda: [rerank(q, role=role)
+    per_query = _timed("retrieve", lambda: [rerank(q, role=role, scopes=scopes)
                                             for q in routing["queries"]])
     chunks = _merge(per_query, MAX_CONTEXT)
 
@@ -205,8 +219,8 @@ def answer_question(query: str, *, use_router: bool = True,
         build_prompt(query, chunks, result["conflicts"], history)))
 
     if verify_answer:
-        result["sentences"] = _timed("verify",
-                                     lambda: verify(result["answer"], chunks))
+        result["sentences"] = _timed(
+            "verify", lambda: verify(result["answer"], chunks, scopes=scopes))
 
     if conversation_id:
         # Recorded only on a successful answer. Storing refusals would let a

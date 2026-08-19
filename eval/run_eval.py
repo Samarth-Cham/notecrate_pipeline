@@ -18,12 +18,13 @@ from datetime import datetime
 from pathlib import Path
 
 import psycopg
-import requests
 from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.hybrid_search import hybrid_search
+from src.llm import embed_query
+from src.pipeline import NOISE_FLOOR
 
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
@@ -35,22 +36,14 @@ EMBED_MODEL = os.environ["EMBED_MODEL"]
 DB_URL = os.environ["DATABASE_URL"]
 
 TOP_K = 5
-NOISE_FLOOR = 0.57
 
 QUESTIONS = ROOT / "eval" / "questions.jsonl"
 RESULTS_DIR = ROOT / "eval" / "results"
 RESULTS_DIR.mkdir(exist_ok=True)
 
 
-def embed(text: str) -> list[float]:
-    r = requests.post(f"{OLLAMA}/api/embeddings",
-                      json={"model": EMBED_MODEL, "prompt": text})
-    r.raise_for_status()
-    return r.json()["embedding"]
-
-
 def retrieve(query: str) -> list[dict]:
-    qvec = embed(query)
+    qvec = embed_query(query)
     with psycopg.connect(DB_URL) as conn:
         rows = conn.execute("""
             SELECT source, 1 - (embedding <=> %s::vector) AS score

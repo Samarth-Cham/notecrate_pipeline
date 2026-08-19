@@ -1,0 +1,512 @@
+{
+  "label": "baseline",
+  "aggregates": {
+    "hit_rate": 1.0,
+    "mean_precision_at_k": 0.8153846153846154,
+    "mean_recall_at_k": 0.8782307692307693,
+    "mrr": 0.9692307692307692
+  },
+  "refusal_accuracy": 0.0,
+  "results": [
+    {
+      "id": 1,
+      "category": "k8s",
+      "question": "How does pod restart policy work?",
+      "top_score": 0.786,
+      "should_refuse": false,
+      "hit_at_k": true,
+      "precision_at_k": 1.0,
+      "recall_at_k": 0.667,
+      "reciprocal_rank": 1.0,
+      "retrieved": [
+        "init-containers.md",
+        "job.md",
+        "job.md",
+        "init-containers.md",
+        "job.md"
+      ]
+    },
+    {
+      "id": 2,
+      "category": "k8s",
+      "question": "What is the difference between a Deployment and a StatefulSet?",
+      "top_score": 0.831,
+      "should_refuse": false,
+      "hit_at_k": true,
+      "precision_at_k": 0.6,
+      "recall_at_k": 0.5,
+      "reciprocal_rank": 1.0,
+      "retrieved": [
+        "statefulset.md",
+        "statefulset.md",
+        "daemonset.md",
+        "statefulset.md",
+        "horizontal-pod-autoscale.md"
+      ]
+    },
+    {
+      "id": 3,
+      "category": "k8s",
+      "question": "How do init containers differ from sidecar containers?",
+      "top_score": 0.801,
+      "should_refuse": false,
+      "hit_at_k": true,
+      "precision_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "retrieved": [
+        "sidecar-containers.md",
+        "sidecar-containers.md",
+        "init-containers.md",
+        "init-containers.md",
+        "init-containers.md"
+      ]
+    },
+    {
+      "id": 4,
+      "category": "k8s",
+      "question": "What are Kubernetes namespaces used for?",
+      "top_score": 0.837,
+      "should_refuse": false,
+      "hit_at_k": true,
+      "precision_at_k": 0.6,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "retrieved": [
+        "namespaces.md",
+        "pdf_Objects In Kubernetes _ Kubernetes.md",
+        "namespaces.md",
+        "pdf_Objects In Kubernetes _ Kubernetes.md",
+        "namespaces.md"
+      ]
+    },
+    {
+      "id": 5,
+      "category": "k8s",
+      "question": "How does a HorizontalPodAutoscaler decide when to scale?",
+      "top_score": 0.865,
+      "should_refuse": false,
+      "hit_at_k": true,
+      "precision_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "retrieved": [
+        "horizontal-pod-autoscale.md",
+        "horizontal-pod-autoscale.md",
+        "horizontal-pod-autoscale.md",
+        "horizontal-pod-autoscale.md",
+        "horizontal-pod-autoscale.md"
+      ]
+    },
+    {
+      "id": 6,
+      "category": "pdf",
+      "question": "What is a least squares solution in terms of the normal equations?",
+      "top_score": 0.724,
+      "should_refuse": false,
+      "hit_at_k": true,
+      "precision_at_k": 0.4,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "retrieved": [
+        "pdf_Homework_8.md",
+        "chat_Data_chunking_textbook_recommendations.md",
+        "pdf_Homework_8.md",
+        "chat_Data_chunking_textbook_recommendations.md",
+        "pdf_Homework 1.md"
+      ]
+    },
+    {
+      "id": 7,
+      "category": "pdf",
+      "question": "What was India's gold import duty raised to in 2026 and why?",
+      "top_score": 0.88,
+      "should_refuse": false,
+      "hit_at_k": true,
+      "precision_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "retrieved": [
+        "chat_Gold_investment_projections_and_optimal_buying_strategy.md",
+        "chat_Gold_investment_projections_and_optimal_buying_strategy.md",
+        "chat_Gold_investment_projections_and_optimal_buying_strategy.md",
+        "pdf_Gold_Market_Outlook_June2026_per_gram.md",
+        "chat_Gold_investment_projections_and_optimal_buying_strategy.md"
+      ]
+    },
+    {
+      "id": 8,
+      "category": "chat",
+      "question": "What chunk size and overlap did we choose for the pipeline and why?",
+      "top_score": 0.712,
+      "should_refuse": false,
+      "hit_at_k": true,
+      "precision_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "retrieved": [
+        "chat_Data_chunking_textbook_recommendations.md",
+        "chat_Data_chunking_textbook_recommendations.md",
+        "chat_Data_chunking_textbook_recommendations.md",
+        "chat_Data_chunking_textbook_recommendations.md",
+        "chat_Data_chunking_textbook_recommendations.md"
+      ]
+    },
+    {
+      "id": 9,
+      "category": "chat",
+      "question": "How do I set up JUnit 5 in a Java project?",
+      "top_score": 0.799,
+      "should_refuse": false,
+      "hit_at_k": true,
+      "precision_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "retrieved": [
+        "chat_Compile_and_Run_JUnit.md",
+        "chat_Compile_and_Run_JUnit.md",
+        "chat_JUnit_5_Setup_Issue.md",
+        "chat_JUnit_5_Setup_Issue.md",
+        "chat_Compile_and_Run_JUnit.md"
+      ]
+    },
+    {
+      "id": 10,
+      "category": "negative",
+      "question": "How do I configure a firewall?",
+      "top_score": 0.651,
+      "should_refuse": true,
+      "refused_correctly": false
+    },
+    {
+      "id": 11,
+      "category": "negative",
+      "question": "What is the best pizza recipe?",
+      "top_score": 0.562,
+      "should_refuse": true,
+      "refused_correctly": false
+    },
+    {
+      "id": 12,
+      "category": "freshness",
+      "question": "How did we fix the pgvector password authentication issue?",
+      "top_score": 0.708,
+      "should_refuse": true,
+      "refused_correctly": false
+    },
+    {
+      "id": 13,
+      "category": "chat",
+      "question": "How does quick sort work?",
+      "top_score": 0.78,
+      "should_refuse": false,
+      "hit_at_k": true,
+      "precision_at_k": 0.6,
+      "recall_at_k": 0.667,
+      "reciprocal_rank": 1.0,
+      "retrieved": [
+        "chat_QuickSort_pivot_swap.md",
+        "chat_QuickSort_pivot_swap.md",
+        "chat_Merge_sort_steps.md",
+        "chat_Recursive_permutation_method.md",
+        "chat_Recursive_permutation_method.md"
+      ]
+    },
+    {
+      "id": 14,
+      "category": "chat",
+      "question": "How to setup github repo",
+      "top_score": 0.787,
+      "should_refuse": false,
+      "hit_at_k": true,
+      "precision_at_k": 0.2,
+      "recall_at_k": 0.5,
+      "reciprocal_rank": 0.2,
+      "retrieved": [
+        "chat_Data_chunking_textbook_recommendations.md",
+        "chat_Data_chunking_textbook_recommendations.md",
+        "chat_Data_chunking_textbook_recommendations.md",
+        "chat_Git_Repo_Setup_Guide.md",
+        "chat_GitHub_Authentication_Fix.md"
+      ]
+    },
+    {
+      "id": 15,
+      "category": "chat",
+      "question": "whats the difference between merge sort and heap sort?",
+      "top_score": 0.75,
+      "should_refuse": false,
+      "hit_at_k": true,
+      "precision_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "retrieved": [
+        "chat_Heap_sort_complexity.md",
+        "chat_Heap_sort_complexity.md",
+        "chat_Merge_sort_steps.md",
+        "chat_Merge_sort_steps.md",
+        "chat_Heap_sort_complexity.md"
+      ]
+    },
+    {
+      "id": 16,
+      "category": "chat",
+      "question": "How does a finite state machine work?",
+      "top_score": 0.812,
+      "should_refuse": false,
+      "hit_at_k": true,
+      "precision_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "retrieved": [
+        "chat_Submarine_Depth_Control_FSM.md",
+        "chat_Submarine_Depth_Control_FSM.md",
+        "chat_Submarine_Depth_Control_FSM.md",
+        "chat_Submarine_Depth_Control_FSM.md",
+        "chat_Submarine_Depth_Control_FSM.md"
+      ]
+    },
+    {
+      "id": 17,
+      "category": "chat",
+      "question": "How do skip lists work",
+      "top_score": 0.678,
+      "should_refuse": true,
+      "refused_correctly": false
+    },
+    {
+      "id": 18,
+      "category": "ambiguous",
+      "question": "How does windows store data?",
+      "top_score": 0.713,
+      "should_refuse": false,
+      "hit_at_k": true,
+      "precision_at_k": 0.4,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "retrieved": [
+        "windows-security.md",
+        "chat_Essential_chapters_for_vector_database_learning.md",
+        "chat_Essential_chapters_for_vector_database_learning.md",
+        "chat_Electron_vs_Tauri_comparison.md",
+        "windows-resource-management.md"
+      ]
+    },
+    {
+      "id": 19,
+      "category": "chat",
+      "question": "what is a hash table and hash function?",
+      "top_score": 0.814,
+      "should_refuse": false,
+      "hit_at_k": true,
+      "precision_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "retrieved": [
+        "pdf_20 - Hash Tables.md",
+        "pdf_19 - Hash Functions.md",
+        "pdf_20 - Hash Tables.md",
+        "pdf_19 - Hash Functions.md",
+        "pdf_20 - Hash Tables.md"
+      ]
+    },
+    {
+      "id": 20,
+      "category": "positive",
+      "question": "what are the rules or proerties of a red black tree?",
+      "top_score": 0.769,
+      "should_refuse": false,
+      "hit_at_k": true,
+      "precision_at_k": 0.8,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "retrieved": [
+        "chat_Red-Black_Tree_Validation.md",
+        "chat_Red-Black_Tree_Validation.md",
+        "chat_Red-Black_Tree_Validation.md",
+        "chat_Red-Black_Tree_Validation.md",
+        "chat_Clear-box_vs_IO_Test.md"
+      ]
+    },
+    {
+      "id": 21,
+      "category": "chat",
+      "question": "How do you validate whether a tree is a valid red-black tree?",
+      "top_score": 0.843,
+      "should_refuse": false,
+      "hit_at_k": true,
+      "precision_at_k": 0.8,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "retrieved": [
+        "chat_Red-Black_Tree_Validation.md",
+        "chat_Clear-box_vs_IO_Test.md",
+        "chat_Red-Black_Tree_Validation.md",
+        "chat_Red-Black_Tree_Validation.md",
+        "chat_Red-Black_Tree_Validation.md"
+      ]
+    },
+    {
+      "id": 22,
+      "category": "chat",
+      "question": "How does building a max heap from an array work?",
+      "top_score": 0.864,
+      "should_refuse": false,
+      "hit_at_k": true,
+      "precision_at_k": 0.6,
+      "recall_at_k": 0.5,
+      "reciprocal_rank": 1.0,
+      "retrieved": [
+        "chat_Build_max_heap_code.md",
+        "chat_Build_max_heap_code.md",
+        "chat_Recursive_permutation_method.md",
+        "chat_Merge_sort_steps.md",
+        "chat_Build_max_heap_code.md"
+      ]
+    },
+    {
+      "id": 23,
+      "category": "chat",
+      "question": "What is the time complexity of heap sort and why?",
+      "top_score": 0.814,
+      "should_refuse": false,
+      "hit_at_k": true,
+      "precision_at_k": 0.8,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "retrieved": [
+        "chat_Heap_sort_complexity.md",
+        "chat_Heap_sort_complexity.md",
+        "chat_Merge_sort_steps.md",
+        "chat_Heap_sort_complexity.md",
+        "chat_Heap_sort_complexity.md"
+      ]
+    },
+    {
+      "id": 24,
+      "category": "chat",
+      "question": "How do I write a Makefile to compile and run a Java project with JUnit?",
+      "top_score": 0.764,
+      "should_refuse": false,
+      "hit_at_k": true,
+      "precision_at_k": 0.8,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "retrieved": [
+        "chat_Makefile_for_CalculatorApp.md",
+        "chat_Git_Repo_Setup_Guide.md",
+        "chat_Makefile_for_CalculatorApp.md",
+        "chat_Compile_and_Run_JUnit.md",
+        "chat_Compile_and_Run_JUnit.md"
+      ]
+    },
+    {
+      "id": 25,
+      "category": "chat",
+      "question": "How do I download a folder from a remote server using bash?",
+      "top_score": 0.777,
+      "should_refuse": false,
+      "hit_at_k": true,
+      "precision_at_k": 0.8,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "retrieved": [
+        "chat_Download_Folder_from_Bash.md",
+        "chat_Download_Folder_from_Bash.md",
+        "chat_Download_Folder_from_Bash.md",
+        "chat_GitHub_Authentication_Fix.md",
+        "chat_Download_Folder_from_Bash.md"
+      ]
+    },
+    {
+      "id": 26,
+      "category": "chat",
+      "question": "What's the difference between clear-box and I/O testing?",
+      "top_score": 0.884,
+      "should_refuse": false,
+      "hit_at_k": true,
+      "precision_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "retrieved": [
+        "chat_Clear-box_vs_IO_Test.md",
+        "chat_Clear-box_vs_IO_Test.md",
+        "chat_Clear-box_vs_IO_Test.md",
+        "chat_Clear-box_vs_IO_Test.md",
+        "chat_Clear-box_vs_IO_Test.md"
+      ]
+    },
+    {
+      "id": 27,
+      "category": "chat",
+      "question": "How do I set up React on Windows?",
+      "top_score": 0.775,
+      "should_refuse": false,
+      "hit_at_k": true,
+      "precision_at_k": 0.8,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "retrieved": [
+        "chat_React_JS_Setup_Windows.md",
+        "chat_React_JS_Setup_Windows.md",
+        "chat_Electron_vs_Tauri_comparison.md",
+        "chat_React_JS_Setup_Windows.md",
+        "chat_React_JS_Setup_Windows.md"
+      ]
+    },
+    {
+      "id": 28,
+      "category": "chat",
+      "question": "How does the recursive permutation generation method work?",
+      "top_score": 0.776,
+      "should_refuse": false,
+      "hit_at_k": true,
+      "precision_at_k": 1.0,
+      "recall_at_k": 0.5,
+      "reciprocal_rank": 1.0,
+      "retrieved": [
+        "chat_Recursive_permutation_method.md",
+        "chat_Recursive_permutation_method.md",
+        "chat_Recursive_permutation_method.md",
+        "chat_Recursive_permutation_method.md",
+        "chat_Recursive_permutation_method.md"
+      ]
+    },
+    {
+      "id": 29,
+      "category": "k8s",
+      "question": "What is the difference between a ConfigMap and a Secret?",
+      "top_score": 0.845,
+      "should_refuse": false,
+      "hit_at_k": true,
+      "precision_at_k": 1.0,
+      "recall_at_k": 0.5,
+      "reciprocal_rank": 1.0,
+      "retrieved": [
+        "configmap.md",
+        "configmap.md",
+        "configmap.md",
+        "configmap.md",
+        "configmap.md"
+      ]
+    },
+    {
+      "id": 30,
+      "category": "chat",
+      "question": "How do I set up Ollama?",
+      "top_score": 0.704,
+      "should_refuse": false,
+      "hit_at_k": true,
+      "precision_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "retrieved": [
+        "chat_Data_chunking_textbook_recommendations.md",
+        "chat_Data_chunking_textbook_recommendations.md",
+        "chat_Data_chunking_textbook_recommendations.md",
+        "chat_Data_chunking_textbook_recommendations.md",
+        "chat_Data_chunking_textbook_recommendations.md"
+      ]
+    }
+  ]
+}

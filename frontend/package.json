@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "start": "concurrently -k -n api,web -c cyan,green \"npm:api\" \"npm:dev\"",
+    "api": "cd .. && .venv\\Scripts\\python.exe -m uvicorn src.api:app --reload --port 8001",
+    "api:posix": "cd .. && .venv/bin/python -m uvicorn src.api:app --reload --port 8001",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
@@ -15,6 +18,7 @@
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "concurrently": "^10.0.5",
     "tailwindcss": "^4.1.0",
     "vite": "^7.0.0"
   }

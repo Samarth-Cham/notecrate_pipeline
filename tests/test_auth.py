@@ -55,8 +55,8 @@ def test_verify_password_rejects_malformed_hash():
 # --- tokens -----------------------------------------------------------------
 
 def test_token_roundtrip():
-    claims = decode_token(create_token("jamie", "junior"))
-    assert claims == {"username": "jamie", "role": "junior"}
+    claims = decode_token(create_token("jamie", "junior", ["public"]))
+    assert claims == {"username": "jamie", "role": "junior", "scopes": ["public"]}
 
 
 def test_token_rejects_unknown_role_at_minting():
@@ -124,3 +124,30 @@ def test_short_secret_is_rejected(monkeypatch):
     monkeypatch.setattr(auth, "SECRET_KEY", "too-short")
     with pytest.raises(AuthError, match="at least 32"):
         create_token("jamie", "junior")
+
+
+# --- permission scopes ------------------------------------------------------
+
+def test_token_carries_scopes():
+    claims = decode_token(create_token("sam", "senior", ["public", "private"]))
+    assert claims["scopes"] == ["public", "private"]
+
+
+def test_token_rejects_unknown_scope_at_minting():
+    with pytest.raises(AuthError, match="unknown scopes"):
+        create_token("sam", "senior", ["public", "everything"])
+
+
+def test_decode_drops_unrecognised_scopes():
+    """A stale claim must narrow access, never widen it or lock the user out."""
+    forged = jwt.encode({"sub": "sam", "role": "senior",
+                         "scopes": ["public", "legacy-admin"]},
+                        auth.SECRET_KEY, algorithm="HS256")
+    assert decode_token(forged)["scopes"] == ["public"]
+
+
+def test_missing_scopes_claim_fails_closed():
+    """A token with no scopes must retrieve nothing, not everything."""
+    forged = jwt.encode({"sub": "sam", "role": "senior"},
+                        auth.SECRET_KEY, algorithm="HS256")
+    assert decode_token(forged)["scopes"] == []

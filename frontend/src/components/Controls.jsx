@@ -1,9 +1,3 @@
-const ROLES = [
-  { value: "", label: "No role" },
-  { value: "junior", label: "Junior" },
-  { value: "senior", label: "Senior" },
-];
-
 function Toggle({ checked, onChange, children, title }) {
   return (
     <label
@@ -22,28 +16,13 @@ function Toggle({ checked, onChange, children, title }) {
   );
 }
 
-export default function Controls({ settings, onChange, onReset, busy }) {
+export default function Controls({ settings, onChange, onReset }) {
   const set = (patch) => onChange({ ...settings, ...patch });
 
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-      <label className="flex items-center gap-1.5 text-xs text-[color:var(--color-ink-muted)]">
-        Role
-        <select
-          value={settings.role}
-          onChange={(e) => set({ role: e.target.value })}
-          disabled={busy}
-          className="rounded border border-[color:var(--color-line)]
-                     bg-[color:var(--color-surface-raised)] px-1.5 py-0.5
-                     text-xs text-[color:var(--color-ink)]"
-          title="In the enterprise version this comes from the authenticated identity, not a dropdown."
-        >
-          {ROLES.map((r) => (
-            <option key={r.value} value={r.value}>{r.label}</option>
-          ))}
-        </select>
-      </label>
-
+      {/* No role selector here any more — it is a property of the signed-in
+          identity, read from the token server-side (plan §2.3). */}
       <Toggle
         checked={settings.verify}
         onChange={(v) => set({ verify: v })}

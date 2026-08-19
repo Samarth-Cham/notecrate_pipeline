@@ -1,15 +1,23 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { RefusalError, askQuestion, checkHealth } from "./api.js";
+import {
+  AuthExpiredError,
+  RefusalError,
+  askQuestion,
+  checkHealth,
+  clearToken,
+  currentUser,
+} from "./api.js";
 import Answer from "./components/Answer.jsx";
 import Controls from "./components/Controls.jsx";
 import Disagreement from "./components/Disagreement.jsx";
+import Login from "./components/Login.jsx";
 import Sources from "./components/Sources.jsx";
 
 const newConversationId = () =>
   `web-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
+// No `role` here. It is not a client setting any more.
 const DEFAULT_SETTINGS = {
-  role: "",
   verify: true,
   route: true,
   detect_conflicts: false,
@@ -140,12 +148,23 @@ export default function App() {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [conversationId, setConversationId] = useState(newConversationId);
   const [online, setOnline] = useState(null);
+  const [user, setUser] = useState(undefined);   // undefined = still checking
   const busy = turns.some((t) => t.state === "pending");
   const bottom = useRef(null);
 
   useEffect(() => {
     checkHealth().then(setOnline);
+    // Restore a session from the stored token rather than re-prompting on
+    // every reload. An expired token resolves to null and shows the login.
+    currentUser().then((u) => setUser(u));
   }, []);
+
+  function signOut() {
+    clearToken();
+    setUser(null);
+    setTurns([]);
+    setConversationId(newConversationId());
+  }
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth" });
@@ -167,9 +186,9 @@ export default function App() {
       setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
 
     try {
+      // No role sent: the server reads it from the bearer token.
       const result = await askQuestion({
         question: q,
-        role: settings.role || null,
         verify: settings.verify,
         route: settings.route,
         detect_conflicts: settings.detect_conflicts,
@@ -181,27 +200,52 @@ export default function App() {
         state: err instanceof RefusalError ? "refused" : "error",
         message: err.message,
       });
+      if (err instanceof AuthExpiredError) setUser(null);
     }
+  }
+
+  if (user === undefined) {
+    return (
+      <p className="p-8 text-sm text-[color:var(--color-ink-muted)]">Loading…</p>
+    );
+  }
+  if (user === null) {
+    return <Login onSignedIn={setUser} />;
   }
 
   return (
     <div className="mx-auto flex min-h-screen max-w-3xl flex-col gap-6 px-4 py-8">
       <header className="space-y-3">
-        <div className="flex items-baseline gap-3">
+        <div className="flex flex-wrap items-baseline gap-3">
           <h1 className="text-xl font-semibold">NoteCrate</h1>
           <span className="text-xs text-[color:var(--color-ink-muted)]">
             multi-contextual RAG over a private corpus
           </span>
           {online === false && (
-            <span className="ml-auto text-xs text-[color:var(--color-uncertain)]">
+            <span className="text-xs text-[color:var(--color-uncertain)]">
               backend unreachable
             </span>
           )}
+          <span className="ml-auto flex items-center gap-2 text-xs
+                           text-[color:var(--color-ink-muted)]">
+            <span title="Retrieval is ranked for this role, read from your token.">
+              {user.username}{" "}
+              <span className="rounded bg-[color:var(--color-line)] px-1.5 py-0.5">
+                {user.role}
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={signOut}
+              className="underline underline-offset-2"
+            >
+              Sign out
+            </button>
+          </span>
         </div>
         <Controls
           settings={settings}
           onChange={setSettings}
-          busy={busy}
           onReset={() => {
             setConversationId(newConversationId());
             setTurns([]);
@@ -216,7 +260,12 @@ export default function App() {
             <ul className="list-inside list-disc space-y-1">
               <li>How does pod restart policy work?</li>
               <li>What is the difference between a Deployment and a StatefulSet?</li>
-              <li>How does garbage collection work? <span className="opacity-70">— then switch role</span></li>
+              <li>
+                How does garbage collection work?{" "}
+                <span className="opacity-70">
+                  — then sign in as the other account to compare ranking
+                </span>
+              </li>
             </ul>
           </div>
         )}

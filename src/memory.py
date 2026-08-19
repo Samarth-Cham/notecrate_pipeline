@@ -26,7 +26,7 @@ from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.llm import embed
+from src.llm import embed_document, embed_query
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 DB_URL = os.environ["DATABASE_URL"]
@@ -69,7 +69,7 @@ def record_turn(conversation_id: str, question: str, answer: str) -> None:
     The embedding covers question AND answer together: a follow-up often
     matches vocabulary the user never typed, only the assistant did.
     """
-    vec = embed(f"{question}\n\n{answer}")
+    vec = embed_document(f"{question}\n\n{answer}")
     with psycopg.connect(DB_URL) as conn:
         ensure_schema(conn)
         conn.execute(
@@ -91,7 +91,7 @@ def recall(conversation_id: str, query: str, *, top_k: int = TOP_TURNS,
     if not conversation_id:
         return []
     if qvec is None:
-        qvec = embed(query)
+        qvec = embed_query(query)
 
     with psycopg.connect(DB_URL) as conn:
         ensure_schema(conn)

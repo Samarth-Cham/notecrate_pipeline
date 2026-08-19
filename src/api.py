@@ -98,6 +98,7 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     username: str
     role: str               # echoed so the UI can label itself; the token is authoritative
+    scopes: list[str]
 
 class QueryResponse(BaseModel):
     answer: str
@@ -132,9 +133,12 @@ def token(form: Annotated[OAuth2PasswordRequestForm, Depends()]):
             headers={"WWW-Authenticate": "Bearer"},
         )
     return TokenResponse(
-        access_token=create_token(user["username"], user["role"]),
+        access_token=create_token(user["username"], user["role"], user["scopes"]),
         username=user["username"],
         role=user["role"],
+        # Hard permission filter, applied inside the retrieval SQL. Distinct
+        # from `role`, which only re-orders what is already visible.
+        scopes=user["scopes"],
     )
 
 @app.get("/me")
@@ -153,6 +157,9 @@ def query(req: QueryRequest, user: CurrentUser):   # plain def, NOT async — bl
         # about: the same corpus, retrieved differently per identity, with
         # nothing client-supplied in the decision.
         role=user["role"],
+        # Hard permission filter, applied inside the retrieval SQL. Distinct
+        # from `role`, which only re-orders what is already visible.
+        scopes=user["scopes"],
         # Namespaced by username so one user cannot read another's thread by
         # guessing or copying a conversation id.
         conversation_id=(f"{user['username']}:{req.conversation_id}"

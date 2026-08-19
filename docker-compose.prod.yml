@@ -1,0 +1,88 @@
+# Staging deployment (plan sections 3.3, 3.6, 3.8).
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# This is a STANDALONE file, not an overlay on docker-compose.yml. That is
+# deliberate: Compose MERGES the `ports` list when you layer files, it does not
+# replace it. An overlay could add a port but could never remove one, so
+# `docker-compose.yml`'s `5432:5432` would survive into production and leave
+# Postgres reachable. The one thing this file exists to prevent.
+#
+# Exposure model — only the frontend is reachable, and only from inside the VM:
+#
+#   db         no published port   reachable only on the compose network
+#   api        no published port   reachable only via the frontend's Nginx
+#   frontend   127.0.0.1:8080      loopback only; the tunnel connects to this
+#
+# Nothing here listens on the VM's LAN address. Public access arrives through
+# cloudflared, which makes an OUTBOUND connection and forwards to 127.0.0.1:8080.
+
+# Both services read config/staging.env directly. NOT `${VAR}` interpolation:
+# Compose resolves those from the shell or a `.env` beside this file, never
+# from `env_file:`, so `${POSTGRES_PASSWORD}` would silently expand to an
+# empty string and Postgres would come up with no password at all.
+
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    env_file: config/staging.env      # supplies POSTGRES_PASSWORD
+    environment:
+      POSTGRES_DB: notecrate
+    volumes:
+      - pgvector_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  api:
+    build: .
+    restart: unless-stopped
+    env_file: config/staging.env
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@db:5432/notecrate
+    volumes:
+      # Reranker + NLI weights are ~1.8GB and download on first use. Without
+      # this they are re-fetched every time the container is recreated.
+      - hf_cache:/root/.cache/huggingface
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 15s
+      timeout: 5s
+      # Importing torch and loading two cross-encoders takes a while on 2 cores.
+      start_period: 300s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          # Two cross-encoders resident plus the request path. Below ~2.5g the
+          # OOM killer takes the container mid-query.
+          memory: 3g
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      # Loopback ONLY. "8080:80" would bind 0.0.0.0 and expose this on the
+      # VM's LAN address as well.
+      - "127.0.0.1:8080:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+
+volumes:
+  pgvector_data:
+  hf_cache:

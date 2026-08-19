@@ -41,20 +41,61 @@ so the CLI, the API and the eval harness all exercise the same path.
 Requires Ollama running locally with `llama3.1:8b` and `nomic-embed-text`.
 
 ```bash
-cp .env.example .env
+cp .env.example .env                   # then fill JWT_SECRET and DEMO_USER_PASSWORD
 docker compose up -d db
 python src/index.py                    # chunk + embed + index the corpus
 python src/backfill_roles.py           # tag documents by audience
+python src/auth.py seed                # create the demo accounts
 python src/ask.py "how does pod restart policy work"
 uvicorn src.api:app --reload           # http://localhost:8000/docs
 ```
 
+Set `OLLAMA_URL` to `127.0.0.1`, not `localhost` — see the note in
+`.env.example`; it is worth ~2s on *every* model call.
+
 `index.py` drops and recreates the chunks table, so re-run `backfill_roles.py`
 after any re-index.
 
+## Auth, and the two independent mechanisms
+
+`/query` requires a bearer token from `POST /token` (OAuth2 password flow).
+
+**The retrieval role comes from the token, never the request.** There is no
+`role` field in `QueryRequest` — that is the point. Plan §2.3 requires role to
+derive from the authenticated identity rather than a UI toggle, so a caller
+sending `{"role": "senior"}` is simply ignored. `conversation_id` is namespaced
+by username server-side, so one user cannot read another's thread by copying
+an id.
+
+Role and permission are **separate**, and conflating them is a security bug:
+
+| | mechanism | where | failure mode |
+|---|---|---|---|
+| `permission_scope` | hard filter | inside the retrieval SQL, pre-rank | data leak |
+| `roles` | ±0.08 boost | after reranking | slightly worse ordering |
+
+A junior deliberately still *receives* senior-tagged chunks, ranked lower —
+that is what "boost, not filter" means, so `roles` can never be what stands
+between a user and a document. `permission_scope` does that job, in the WHERE
+clause of both retrieval CTEs, before any `LIMIT`. Filtering afterwards would
+mean the reranker, the conflict check and the verification pass had already
+read text the user cannot see.
+
+Scopes are threaded through **every** retrieval path, including the
+verification pass — which re-retrieves per sentence and would otherwise leak
+private text through `support_source`. `answer_question(scopes=...)` is a
+required argument with no default, so a new call site cannot silently read the
+whole corpus; local tools pass `permissions.UNRESTRICTED` explicitly.
+
+Demo accounts show the two axes are independent: `jamie` is junior/`public`,
+`sam` is senior/`public+private`.
+
+```bash
+python src/backfill_scopes.py    # assign scopes (re-run after any re-index)
+```
+
 `POST /query` returns the answer plus `sources`, `sentences` (inline grounding
-tags), a `grounding` summary, and `history`. Pass `role` (`junior` | `senior`)
-to condition retrieval, and a stable `conversation_id` to enable memory.
+tags), a `grounding` summary, `history`, and `timings` (per-stage seconds).
 
 ## Role-aware retrieval
 

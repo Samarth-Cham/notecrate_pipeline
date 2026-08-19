@@ -9,13 +9,15 @@ import sys
 from pathlib import Path
 
 import psycopg
-import requests
 from dotenv import load_dotenv
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from src.llm import embed_query
+from src.permissions import UNRESTRICTED, normalise
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-OLLAMA = os.environ["OLLAMA_URL"]
-EMBED_MODEL = os.environ["EMBED_MODEL"]
 DB_URL = os.environ["DATABASE_URL"]
 
 CANDIDATES = 20   # how deep each ranker looks
@@ -23,18 +25,26 @@ RRF_K = 60        # RRF damping constant (conventional default)
 TOP_N = 5
 
 
-def embed(text: str) -> list[float]:
-    r = requests.post(f"{OLLAMA}/api/embeddings",
-                      json={"model": EMBED_MODEL, "prompt": text})
-    r.raise_for_status()
-    return r.json()["embedding"]
+# The permission predicate is repeated in BOTH retrieval CTEs, inside each
+# one's own WHERE, before its LIMIT. That placement is the security property:
+# filtering afterwards would let unauthorised chunks consume candidate slots
+# and reach the reranker, the conflict check and the verification pass.
+#
+# `%(scopes)s IS NULL` is the UNRESTRICTED path for local tools. Serving code
+# always binds a real array, and an empty array matches nothing.
+# The ::text[] casts are required, not cosmetic: without them Postgres cannot
+# infer the parameter's type when it is NULL and raises AmbiguousParameter.
+# It fails loudly rather than matching everything, which is the right
+# direction for a permission predicate to break in.
+_PERMITTED = ("(%(scopes)s::text[] IS NULL "
+              "OR permission_scope = ANY(%(scopes)s::text[]))")
 
-
-HYBRID_SQL = """
+HYBRID_SQL = f"""
 WITH vector_hits AS (
     SELECT id, ROW_NUMBER() OVER (ORDER BY embedding <=> %(qvec)s::vector) AS rank,
            1 - (embedding <=> %(qvec)s::vector) AS sim
     FROM chunks
+    WHERE {_PERMITTED}
     ORDER BY embedding <=> %(qvec)s::vector
     LIMIT %(cand)s
 ),
@@ -44,6 +54,7 @@ text_hits AS (
            ) AS rank
     FROM chunks
     WHERE text_search @@ websearch_to_tsquery('english', %(q)s)
+      AND {_PERMITTED}
     LIMIT %(cand)s
 )
 SELECT c.id, c.source, c.section, c.text, c.roles,
@@ -63,18 +74,24 @@ LIMIT %(topn)s
 """
 
 
-def hybrid_search(query: str, top_n: int = None, qvec: list[float] = None) -> list[dict]:
+def hybrid_search(query: str, top_n: int = None, qvec: list[float] = None,
+                  scopes=UNRESTRICTED) -> list[dict]:
     """Top-n chunks by RRF over vector + full-text ranks.
 
     `qvec` lets a caller reuse an embedding it already computed.
+
+    `scopes` is the permission filter. It defaults to UNRESTRICTED for local
+    tools; every serving path goes through `answer_question`, which requires
+    it explicitly. An empty list returns nothing — see src/permissions.py.
     """
     if qvec is None:
-        qvec = embed(query)
+        qvec = embed_query(query)
     with psycopg.connect(DB_URL) as conn:
         rows = conn.execute(HYBRID_SQL, {
             "qvec": str(qvec), "q": query,
             "cand": CANDIDATES, "k": RRF_K,
             "topn": TOP_N if top_n is None else top_n,
+            "scopes": normalise(scopes),
         }).fetchall()
     return [
         {"id": r[0], "source": r[1], "section": r[2], "text": r[3],

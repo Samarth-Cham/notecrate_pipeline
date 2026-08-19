@@ -17,6 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from src.permissions import UNRESTRICTED
 from src.pipeline import answer_question
 from src.verify import grounding_summary
 
@@ -35,6 +36,9 @@ def main():
     query = args[0] if args else "how does pod restart policy work"
     result = answer_question(
         query,
+        # Local CLI: read the whole corpus. Serving paths pass the caller's
+        # scopes from their token instead — see src/permissions.py.
+        scopes=UNRESTRICTED,
         verify_answer="--no-verify" not in flags,
         role=_flag_value(flags, "role"),
         conversation_id=_flag_value(flags, "conversation"),

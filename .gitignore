@@ -16,6 +16,13 @@ ingestions/*
 frontend/node_modules/
 frontend/dist/
 
+# `.env` above matches at any depth, but frontend/.env holds no secrets — just
+# which port the dev proxy points at — and `npm run dev` needs it to work
+# without the caller exporting a shell variable. Per-machine overrides go in
+# frontend/.env.local, which stays ignored.
+!frontend/.env
+frontend/.env.local
+
 # Regenerable candidate pools for the label set (eval/harvest_labels.py).
 # The labels themselves — conflicts.jsonl, grounding.jsonl — and the frozen
 # answers.jsonl they are attached to ARE committed: hand-made, and answers

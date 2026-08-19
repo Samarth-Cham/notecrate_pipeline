@@ -50,6 +50,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.llm import chat_json, embed
+from src.permissions import UNRESTRICTED
 from src.pipeline import answer_question
 from src.verify import grounding_summary
 
@@ -125,7 +126,7 @@ def keyword_coverage(answer: str, expected: list[str]) -> float | None:
 
 def score_question(q: dict, *, verify: bool, conflicts: bool = False) -> dict:
     started = time.perf_counter()
-    result = answer_question(q["question"], verify_answer=verify,
+    result = answer_question(q["question"], scopes=UNRESTRICTED, verify_answer=verify,
                              detect_conflicts_enabled=conflicts)
     elapsed = time.perf_counter() - started
 

@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from sentence_transformers import CrossEncoder
 
 from src.hybrid_search import hybrid_search
+from src.permissions import UNRESTRICTED
 from src.roles import adjust_score
 
 RERANK_MODEL = "BAAI/bge-reranker-base"
@@ -44,9 +45,9 @@ def _load():
 
 
 def rerank(query: str, top_n: int = TOP_N, qvec: list[float] = None,
-           role: str = None) -> list[dict]:
+           role: str = None, scopes=UNRESTRICTED) -> list[dict]:
     # Widen the hybrid net: it returns 5 by default, we want CANDIDATES to score.
-    candidates = hybrid_search(query, top_n=CANDIDATES, qvec=qvec)
+    candidates = hybrid_search(query, top_n=CANDIDATES, qvec=qvec, scopes=scopes)
 
     if not candidates:
         return []

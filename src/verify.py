@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.hybrid_search import hybrid_search
 from src.nli import score as nli_score
+from src.permissions import UNRESTRICTED
 
 # Measured against eval/labels/grounding.jsonl (54 hand-labelled sentences)
 # by eval/calibrate.py:
@@ -154,9 +155,15 @@ def _is_claim(sentence: str) -> bool:
     return len(re.findall(r"[A-Za-z]{2,}", claim)) >= MIN_WORDS
 
 
-def verify(answer: str, chunks: list[dict], *, retrieve_k: int = RETRIEVE_K) -> list[dict]:
+def verify(answer: str, chunks: list[dict], *, retrieve_k: int = RETRIEVE_K,
+           scopes=UNRESTRICTED) -> list[dict]:
     """Tag each sentence of `answer`. `chunks` are the prompt's context
-    chunks, in label order — chunks[0] is what the model cites as [1]."""
+    chunks, in label order — chunks[0] is what the model cites as [1].
+
+    `scopes` must be threaded through: this pass RE-RETRIEVES per sentence,
+    so without it the verifier would read chunks the user is not cleared for
+    and could surface them as `support_source` in the response.
+    """
     sentences = split_sentences(answer)
 
     # Collect every (premise, hypothesis) pair up front so the cross-encoder
@@ -175,7 +182,7 @@ def verify(answer: str, chunks: list[dict], *, retrieve_k: int = RETRIEVE_K) -> 
 
         premises = [chunks[n - 1] for n in labels if 1 <= n <= len(chunks)]
         try:
-            premises += hybrid_search(claim, top_n=retrieve_k)
+            premises += hybrid_search(claim, top_n=retrieve_k, scopes=scopes)
         except Exception:
             # Retrieval failure degrades the check to cited-chunks-only
             # rather than failing the whole request.
@@ -259,7 +266,7 @@ if __name__ == "__main__":
     from src.pipeline import answer_question
 
     query = sys.argv[1] if len(sys.argv) > 1 else "how does pod restart policy work"
-    result = answer_question(query)
+    result = answer_question(query, scopes=UNRESTRICTED)
 
     print(f"\nQ: {query}\n" + "=" * 60)
     for s in result["sentences"]:

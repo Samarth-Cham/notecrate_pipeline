@@ -37,6 +37,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.nli import score as nli_score
+from src.permissions import UNRESTRICTED
 from src.pipeline import answer_question
 from src.rerank import rerank
 from src.verify import RETRIEVE_K, _is_claim, cited_labels, split_sentences, strip_citations
@@ -145,7 +146,7 @@ def freeze_answers(questions: list[dict]) -> list[dict]:
     """Run the pipeline once and persist the answers verbatim."""
     rows = []
     for q in questions:
-        result = answer_question(q["question"])
+        result = answer_question(q["question"], scopes=UNRESTRICTED)
         if result["refused"]:
             print(f"  [{q['id']:3d}] refused — skipped")
             continue

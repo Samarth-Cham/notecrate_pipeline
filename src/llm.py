@@ -34,12 +34,43 @@ if "//localhost" in OLLAMA:
 _session = requests.Session()
 
 
-def embed(text: str) -> list[float]:
+# nomic-embed-text is trained with task prefixes and expects them at inference.
+# Queries and documents get DIFFERENT prefixes, which is the point: the model
+# learns an asymmetric space where a short question sits near the passage that
+# answers it, rather than near other short questions.
+#
+# Omitting them is silently lossy rather than broken — similarity still
+# correlates with relevance, just more weakly. Measured on one query/passage
+# pair from this corpus: 0.569 without prefixes, 0.704 with.
+#
+# Both sides must agree. Embedding documents with a prefix and queries without
+# is worse than using neither, so changing these means re-embedding the corpus
+# (src/reembed.py).
+QUERY_PREFIX = "search_query: "
+DOCUMENT_PREFIX = "search_document: "
+
+
+def _embed(text: str) -> list[float]:
     r = _session.post(f"{OLLAMA}/api/embeddings",
                       json={"model": EMBED_MODEL, "prompt": text},
                       timeout=TIMEOUT)
     r.raise_for_status()
     return r.json()["embedding"]
+
+
+def embed_query(text: str) -> list[float]:
+    """Embed a search query — anything being used to look something up."""
+    return _embed(QUERY_PREFIX + text)
+
+
+def embed_document(text: str) -> list[float]:
+    """Embed a passage being stored and searched against."""
+    return _embed(DOCUMENT_PREFIX + text)
+
+
+# Most call sites are queries. Kept as an explicit alias rather than a default
+# argument so no call site can pick the wrong side by omission.
+embed = embed_query
 
 
 def chat(messages: list[dict], *, temperature: float = 0.2,

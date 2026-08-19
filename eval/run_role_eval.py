@@ -24,6 +24,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from src.permissions import UNRESTRICTED
 from src.pipeline import MAX_CONTEXT, _merge, answer_question
 from src.rerank import rerank
 from src.roles import ROLES
@@ -84,7 +85,7 @@ def main():
 
         if args.answers:
             for role in ROLES:
-                r = answer_question(query, verify_answer=False, role=role)
+                r = answer_question(query, verify_answer=False, role=role, scopes=UNRESTRICTED)
                 row[f"{role}_answer"] = r["answer"]
                 print(f"\n  [{role} answer] {(r['answer'] or '')[:260]}")
 
