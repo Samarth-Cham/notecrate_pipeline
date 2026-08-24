@@ -1,0 +1,46 @@
+{
+  "current": {
+    "hit_rate": 1.0,
+    "precision_at_5": 0.7,
+    "recall_at_5": 0.8525641025641026,
+    "mrr": 0.8923076923076922,
+    "latency_mean_s": 7.643214561537976,
+    "latency_p95_s": 9.001528799999505,
+    "n": 26,
+    "model": "BAAI/bge-reranker-base",
+    "candidates": 20
+  },
+  "cand10": {
+    "hit_rate": 1.0,
+    "precision_at_5": 0.7769230769230769,
+    "recall_at_5": 0.8653846153846154,
+    "mrr": 0.9038461538461539,
+    "latency_mean_s": 3.642871307692146,
+    "latency_p95_s": 4.437710199999856,
+    "n": 26,
+    "model": "BAAI/bge-reranker-base",
+    "candidates": 10
+  },
+  "minilm": {
+    "hit_rate": 1.0,
+    "precision_at_5": 0.7923076923076924,
+    "recall_at_5": 0.8589743589743589,
+    "mrr": 0.9551282051282051,
+    "latency_mean_s": 1.2657689807688608,
+    "latency_p95_s": 1.5395057999994606,
+    "n": 26,
+    "model": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+    "candidates": 20
+  },
+  "minilm10": {
+    "hit_rate": 1.0,
+    "precision_at_5": 0.8,
+    "recall_at_5": 0.8589743589743589,
+    "mrr": 0.9743589743589743,
+    "latency_mean_s": 0.6280200730767459,
+    "latency_p95_s": 0.764739099999133,
+    "n": 26,
+    "model": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+    "candidates": 10
+  }
+}

@@ -197,10 +197,48 @@ def test_adjust_score_directions():
 
 def test_role_boost_cannot_outrank_a_clear_relevance_gap():
     """The plan requires a boost, not a filter: a strongly relevant chunk for
-    the 'wrong' audience must still beat a weak one for the right audience."""
-    relevant_wrong_role = adjust_score(0.95, ["senior"], "junior")
-    weak_right_role = adjust_score(0.60, ["junior"], "junior")
+    the 'wrong' audience must still beat a weak one for the right audience.
+
+    A mismatch loses ROLE_PENALTY and a match gains ROLE_BOOST, so the pair
+    swings by their sum — that is exactly the relevance gap the boost can
+    overturn, and the guarantee only holds beyond it. Derived rather than
+    hardcoded so this stays true when the constants are recalibrated for a
+    different reranker's score scale.
+    """
+    overturnable = ROLE_BOOST + ROLE_PENALTY
+    relevant_wrong_role = adjust_score(overturnable + 1.0, ["senior"], "junior")
+    weak_right_role = adjust_score(0.0, ["junior"], "junior")
     assert relevant_wrong_role > weak_right_role
+
+
+def test_role_boost_matches_the_active_reranker():
+    """Guard against the boost silently becoming a no-op after a model swap.
+
+    Reranker score scales differ by an order of magnitude — bge-reranker emits
+    sigmoid-squashed (0,1), ms-marco-MiniLM emits raw logits — so a boost
+    calibrated for one is meaningless on the other. Nothing else in the system
+    fails when that happens: the API keeps reporting a `roles` field and an
+    adjustment of zero effect.
+
+    Values come from eval/run_role_eval.py's overlap metric, recorded in
+    src/roles.py. This test only checks the constant matches the model in use;
+    re-deriving it needs the corpus, so it lives in the eval harness.
+    """
+    from src.rerank import RERANK_MODEL
+
+    calibrated = {
+        "cross-encoder/ms-marco-MiniLM-L-6-v2": 2.5,
+        "BAAI/bge-reranker-base": 0.08,
+    }.get(RERANK_MODEL)
+
+    if calibrated is None:
+        pytest.skip(f"no calibration recorded for {RERANK_MODEL}; run "
+                    "eval/run_role_eval.py and sweep ROLE_BOOST for overlap")
+
+    assert ROLE_BOOST == calibrated, (
+        f"ROLE_BOOST={ROLE_BOOST} was calibrated for a different reranker; "
+        f"{RERANK_MODEL} needs {calibrated}"
+    )
 
 
 def test_classify_document_falls_back_to_all(monkeypatch):
