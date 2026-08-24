@@ -1,0 +1,53 @@
+# Plan section 3.6: "Centralized logs via Loki/Promtail so interns can trace a
+# single query across services instead of SSH-ing into each container to tail
+# logs."
+#
+# Discovery uses the Docker socket. That is the standard pattern and it is what
+# gives logs a readable `compose_service` label instead of a container id — but
+# it is worth naming: a container with the Docker socket can control the Docker
+# daemon, which is effectively root on the host. Mounting it :ro restricts
+# writes to the socket FILE, not to the API. Acceptable on a private staging
+# VM; it would need rethinking anywhere else.
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: warn
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 15s
+
+    relabel_configs:
+      # Compose labels each container with its service name. Without this the
+      # only label is a 64-char container id, which makes the logs unusable
+      # for the "trace one query across services" job they exist for.
+      - source_labels: ["__meta_docker_container_label_com_docker_compose_service"]
+        target_label: compose_service
+      - source_labels: ["__meta_docker_container_label_com_docker_compose_project"]
+        target_label: compose_project
+      - source_labels: ["__meta_docker_container_name"]
+        regex: "/(.*)"
+        target_label: container
+
+      # Only this stack. Without the filter Promtail also ships its own logs
+      # to Loki, which then logs the ingestion, which Promtail ships.
+      - source_labels: ["__meta_docker_container_label_com_docker_compose_project"]
+        regex: "notecrate_pipeline"
+        action: keep
+
+    pipeline_stages:
+      # uvicorn writes plain lines, not JSON. Extracting the level lets Grafana
+      # filter to errors without a regex in every query.
+      - regex:
+          expression: "^(?P<level>INFO|WARNING|ERROR|CRITICAL|DEBUG):"
+      - labels:
+          level:

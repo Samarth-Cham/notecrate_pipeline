@@ -8,6 +8,9 @@ langchain-text-splitters
 tiktoken
 pymupdf
 
+# observability
+prometheus-client
+
 # auth
 pyjwt[crypto]
 bcrypt

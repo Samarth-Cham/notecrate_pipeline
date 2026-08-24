@@ -1,0 +1,134 @@
+{
+  "uid": "notecrate-overview",
+  "title": "NoteCrate — Pipeline Overview",
+  "description": "Plan 3.6: end-to-end query latency (p50/p95), retrieval latency, generation latency, error rate, request volume. Per-stage panels come from src/metrics.py.",
+  "tags": ["notecrate"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Query latency p50 / p95",
+      "description": "End-to-end /query latency. The plan asks for exactly these two quantiles.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "lineWidth": 2, "fillOpacity": 5 } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum(rate(notecrate_request_duration_seconds_bucket{endpoint=\"/query\"}[10m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum(rate(notecrate_request_duration_seconds_bucket{endpoint=\"/query\"}[10m])) by (le))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Per-stage latency (p95)",
+      "description": "Where the time actually goes. retrieve = hybrid search + cross-encoder rerank; verify = per-sentence NLI. Both are CPU-bound, so they dominate on the 2-core VM. generate is Ollama on the host GPU.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "lineWidth": 2, "fillOpacity": 10, "stacking": { "mode": "none" } } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum(rate(notecrate_stage_duration_seconds_bucket[10m])) by (le, stage))",
+          "legendFormat": "{{stage}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Request volume",
+      "description": "Requests per minute by endpoint.",
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "reqpm" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(notecrate_requests_total[5m])) by (endpoint) * 60",
+          "legendFormat": "{{endpoint}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Error rate (5xx)",
+      "description": "5xx only. 401 and 404 are excluded deliberately — a rejected login and a refused question are the system working, not failing.",
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 0.01 },
+              { "color": "red", "value": 0.05 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(notecrate_requests_total{status=~\"5..\"}[15m])) / clamp_min(sum(rate(notecrate_requests_total[15m])), 0.0001)"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Refusals (gate)",
+      "description": "Questions declined at the noise floor before generation ran. Non-zero is healthy — it means the corpus boundary is being enforced. A sudden climb usually means the floor needs re-fitting after a corpus change.",
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum(increase(notecrate_refusals_total[1h]))", "legendFormat": "last hour" }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Grounding ratio (mean)",
+      "description": "Mean fraction of answer sentences tagged `grounded`. Tag accuracy is only ~0.54 against the labelled set, so read this as a trend line, not a quality score — a sharp drop is meaningful, an absolute value is not.",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 15 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(notecrate_grounding_ratio_sum[30m])) / clamp_min(sum(rate(notecrate_grounding_ratio_count[30m])), 0.0001)",
+          "legendFormat": "grounded fraction"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "logs",
+      "title": "API logs",
+      "description": "Centralized via Loki/Promtail, so a single query can be traced without SSH-ing into containers.",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 15 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "options": { "showTime": true, "wrapLogMessage": true, "sortOrder": "Descending" },
+      "targets": [
+        { "refId": "A", "expr": "{compose_service=\"api\"}", "queryType": "range" }
+      ]
+    }
+  ]
+}

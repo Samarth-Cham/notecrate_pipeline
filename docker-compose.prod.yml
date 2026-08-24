@@ -89,6 +89,103 @@ services:
         limits:
           memory: 128m
 
+  # --- observability (plan 3.6) ---------------------------------------------
+  #
+  # Memory limits are deliberately small. The VM has 5.7GB total and `api`
+  # alone is allowed 3GB for two resident cross-encoders; monitoring that
+  # starves the thing it monitors is worse than no monitoring.
+  #
+  # None of these publish a port except Grafana. Prometheus and Loki are
+  # reachable only on the compose network, which is also why neither has
+  # authentication configured — nothing outside the VM can address them.
+
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      # 7 days on a shared 18GB disk. The default is 15d and unbounded by size.
+      - --storage.tsdb.retention.time=7d
+      - --storage.tsdb.retention.size=512MB
+      - --web.enable-lifecycle
+    volumes:
+      - ./ops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      - api
+    deploy:
+      resources:
+        limits:
+          memory: 384m
+
+  loki:
+    image: grafana/loki:3.3.2
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./ops/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki_data:/loki
+    deploy:
+      resources:
+        limits:
+          memory: 384m
+
+  promtail:
+    image: grafana/promtail:3.3.2
+    restart: unless-stopped
+    command: -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./ops/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      # Discovery + the log files themselves. See the socket caveat in the
+      # promtail config: :ro protects the socket file, not the Docker API.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    depends_on:
+      - loki
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+
+  grafana:
+    image: grafana/grafana:11.5.1
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # `${VAR:-default}` interpolation is safe HERE, unlike the db block: a
+      # missing value falls back to a working default instead of silently
+      # becoming an empty password. Override by exporting the variables or
+      # putting them in a `.env` beside this file — NOT in config/staging.env,
+      # which Compose does not read for interpolation.
+      #
+      # Grafana is not env_file'd from staging.env on purpose: that would put
+      # JWT_SECRET and the database password into the environment of a service
+      # that has no use for either.
+      #
+      # admin/admin is acceptable only because Grafana is reachable solely
+      # from the VMware NAT network. Set a real password before that changes.
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    volumes:
+      - ./ops/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./ops/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - loki
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
 volumes:
   pgvector_data:
   hf_cache:
+  prometheus_data:
+  loki_data:
+  grafana_data:

@@ -12,17 +12,48 @@ without a second call: numbered sources for citations, `conflicts` for the
 that token, never from the request — see src/auth.py.
 """
 
+import time
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 
+from src import metrics
 from src.auth import AuthError, authenticate, create_token, decode_token
 from src.pipeline import CONFLICT_DETECTION_ENABLED, answer_question
 from src.verify import grounding_summary
 
-app = FastAPI(title="NoteCrate Pipeline", version="0.3.0")
+app = FastAPI(title="NoteCrate Pipeline", version="0.4.0")
+
+
+@app.middleware("http")
+async def record_metrics(request: Request, call_next):
+    """Request volume, latency and error rate for every endpoint (plan 3.6).
+
+    Labelled by route PATTERN, not raw path — a label whose cardinality grows
+    with traffic will eventually take Prometheus down, and raw paths do that.
+    """
+    started = time.perf_counter()
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+    except Exception:
+        # An unhandled exception is a 500 the client will see, so it belongs
+        # in the error rate even though no response object exists yet.
+        metrics.requests_total.labels(endpoint=_route_of(request), status="500").inc()
+        raise
+
+    endpoint = _route_of(request)
+    metrics.requests_total.labels(endpoint=endpoint, status=str(status_code)).inc()
+    metrics.request_duration.labels(endpoint=endpoint).observe(
+        time.perf_counter() - started)
+    return response
+
+
+def _route_of(request: Request) -> str:
+    route = request.scope.get("route")
+    return getattr(route, "path", None) or "unmatched"
 
 oauth2 = OAuth2PasswordBearer(tokenUrl="token")
 
@@ -120,6 +151,14 @@ def health():
     """Unauthenticated on purpose — container healthchecks poll this."""
     return {"status": "ok"}
 
+@app.get("/metrics")
+def prometheus_metrics():
+    """Unauthenticated, like /health: Prometheus scrapes it on the compose
+    network, and nothing outside the VM can reach the api service at all —
+    Nginx only proxies /api/, and the api port is not published."""
+    body, content_type = metrics.render()
+    return Response(content=body, media_type=content_type)
+
 @app.post("/token", response_model=TokenResponse)
 def token(form: Annotated[OAuth2PasswordRequestForm, Depends()]):
     """OAuth2 password flow (plan section 4: FastAPI + OAuth2 password/JWT)."""
@@ -166,6 +205,11 @@ def query(req: QueryRequest, user: CurrentUser):   # plain def, NOT async — bl
                          if req.conversation_id else None),
         detect_conflicts_enabled=req.detect_conflicts,
     )
+
+    # Recorded before the refusal branch: a refusal still consumed retrieval,
+    # and its stage timings are exactly what you want when diagnosing "why is
+    # the p95 climbing".
+    metrics.observe_result(result)
 
     if result["refused"]:
         raise HTTPException(status_code=404, detail=result["reason"])
