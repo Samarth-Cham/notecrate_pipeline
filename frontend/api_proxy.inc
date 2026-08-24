@@ -1,10 +1,14 @@
-# Shared proxy settings for the API. Included by both /api/ and /api/token,
-# which differ only in which rate-limit zone they use — keeping the proxy
-# directives in one place means the two cannot drift apart.
-
-# Service name from docker-compose (the plan calls this "backend-api"; the
-# compose service is `api`).
-proxy_pass http://api:8000/;
+# Shared proxy settings for the API. Included by both /api/ and /api/token.
+#
+# proxy_pass is deliberately NOT here — each location must set its own.
+# Nginx replaces "the part of the request URI matching the location" with the
+# proxy_pass URI, so a shared `proxy_pass http://api:8000/` means:
+#
+#   location /api/        ->  /api/query  becomes  /query    correct
+#   location = /api/token ->  /api/token  becomes  /         404
+#
+# The exact-match location consumes the whole path, so it needs the full
+# upstream path spelled out. Sharing one proxy_pass silently broke login.
 
 proxy_set_header Host $host;
 proxy_set_header X-Real-IP $remote_addr;
