@@ -23,6 +23,11 @@ frontend/dist/
 !frontend/.env
 frontend/.env.local
 
+# Per-environment config (plan 3.5). The real files hold secrets and are
+# created on the machine that uses them; only the templates are committed.
+config/*.env
+!config/*.env.example
+
 # Regenerable candidate pools for the label set (eval/harvest_labels.py).
 # The labels themselves — conflicts.jsonl, grounding.jsonl — and the frozen
 # answers.jsonl they are attached to ARE committed: hand-made, and answers

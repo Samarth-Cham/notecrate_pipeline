@@ -8,14 +8,19 @@
 # `docker-compose.yml`'s `5432:5432` would survive into production and leave
 # Postgres reachable. The one thing this file exists to prevent.
 #
-# Exposure model — only the frontend is reachable, and only from inside the VM:
+# Exposure model — only the frontend is published:
 #
 #   db         no published port   reachable only on the compose network
 #   api        no published port   reachable only via the frontend's Nginx
-#   frontend   127.0.0.1:8080      loopback only; the tunnel connects to this
+#   frontend   8080                reachable at http://<vm-ip>:8080
 #
-# Nothing here listens on the VM's LAN address. Public access arrives through
-# cloudflared, which makes an OUTBOUND connection and forwards to 127.0.0.1:8080.
+# The VM sits behind VMware NAT, so 192.168.94.0/24 is reachable from the
+# Windows host and from nothing else — no LAN exposure, no internet exposure.
+# NAT is doing the job a firewall would otherwise have to.
+#
+# If this ever becomes publicly reachable, change `8080:80` back to
+# "127.0.0.1:8080:80" and put a tunnel in front, so the only ingress is one
+# outbound connection you control.
 
 # Both services read config/staging.env directly. NOT `${VAR}` interpolation:
 # Compose resolves those from the shell or a `.env` beside this file, never
@@ -44,9 +49,9 @@ services:
   api:
     build: .
     restart: unless-stopped
+    # DATABASE_URL lives in this file too, with the password written inline.
+    # Keep it in sync with POSTGRES_PASSWORD — the file comments say so.
     env_file: config/staging.env
-    environment:
-      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@db:5432/notecrate
     volumes:
       # Reranker + NLI weights are ~1.8GB and download on first use. Without
       # this they are re-fetched every time the container is recreated.
@@ -72,9 +77,10 @@ services:
     build: ./frontend
     restart: unless-stopped
     ports:
-      # Loopback ONLY. "8080:80" would bind 0.0.0.0 and expose this on the
-      # VM's LAN address as well.
-      - "127.0.0.1:8080:80"
+      # Bound on all the VM's interfaces so the Windows host can browse to
+      # http://192.168.94.128:8080. That is only reachable across the VMware
+      # NAT network — see the exposure note at the top of this file.
+      - "8080:80"
     depends_on:
       api:
         condition: service_healthy

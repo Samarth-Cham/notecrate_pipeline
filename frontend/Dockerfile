@@ -14,6 +14,9 @@ RUN npm run build
 
 FROM nginx:1.27-alpine AS runtime
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+# default.conf `include`s this; a missing include is a hard startup failure,
+# not a warning.
+COPY api_proxy.inc /etc/nginx/conf.d/api_proxy.inc
 COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 80
