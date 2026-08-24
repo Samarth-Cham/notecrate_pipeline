@@ -12,7 +12,7 @@
       "id": 1,
       "type": "timeseries",
       "title": "Query latency p50 / p95",
-      "description": "End-to-end /query latency. The plan asks for exactly these two quantiles.",
+      "description": "End-to-end /query latency. Warm single-user baseline on the staging VM is ~5.5s; the full eval set averages 8.3s. Under concurrency this diverges sharply from the per-stage panel — a p95 of 87s was measured at 5 VUs while the stages themselves summed to ~21s. That gap is queueing, not work: the box serves 1-2 concurrent users before contention dominates.",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
       "fieldConfig": {
         "defaults": { "unit": "s", "custom": { "lineWidth": 2, "fillOpacity": 5 } },
@@ -35,7 +35,7 @@
       "id": 2,
       "type": "timeseries",
       "title": "Per-stage latency (p95)",
-      "description": "Where the time actually goes. retrieve = hybrid search + cross-encoder rerank; verify = per-sentence NLI. Both are CPU-bound, so they dominate on the 2-core VM. generate is Ollama on the host GPU.",
+      "description": "Where the time actually goes. retrieve = hybrid search + cross-encoder rerank; verify = per-sentence NLI; generate = Ollama on the host GPU. Healthy on the 4-core staging VM, warm: retrieve ~1.5s, generate ~2s, verify ~2s. retrieve climbing past ~5s usually means multi-hop routing fired (one rerank pass per sub-query). verify scales with answer LENGTH, not question difficulty, so it is the noisiest of the three.",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
       "fieldConfig": {
         "defaults": { "unit": "s", "custom": { "lineWidth": 2, "fillOpacity": 10, "stacking": { "mode": "none" } } },
@@ -107,7 +107,7 @@
       "id": 6,
       "type": "timeseries",
       "title": "Grounding ratio (mean)",
-      "description": "Mean fraction of answer sentences tagged `grounded`. Tag accuracy is only ~0.54 against the labelled set, so read this as a trend line, not a quality score — a sharp drop is meaningful, an absolute value is not.",
+      "description": "Mean fraction of answer sentences TAGGED `grounded` — which is not the same as the fraction that ARE. Tag accuracy is ~0.54 against the labelled set, so read this as a trend line: a sharp drop is meaningful, the absolute value is not. Note it also moves when the tagger changes: cutting premises 3->2 raised accuracy while LOWERING this number, because the tagger became more conservative.",
       "gridPos": { "h": 7, "w": 12, "x": 0, "y": 15 },
       "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] },
       "targets": [

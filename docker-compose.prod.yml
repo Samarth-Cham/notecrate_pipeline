@@ -154,20 +154,18 @@ services:
     ports:
       - "3000:3000"
     environment:
-      # `${VAR:-default}` interpolation is safe HERE, unlike the db block: a
-      # missing value falls back to a working default instead of silently
-      # becoming an empty password. Override by exporting the variables or
-      # putting them in a `.env` beside this file — NOT in config/staging.env,
-      # which Compose does not read for interpolation.
+      # Required, not defaulted. This used to be `${GRAFANA_PASSWORD:-admin}`,
+      # which meant the stack came up with admin/admin and stayed that way
+      # unless someone remembered — the security review found exactly that.
+      # `:?` makes Compose refuse to start with a readable message instead.
       #
-      # Grafana is not env_file'd from staging.env on purpose: that would put
-      # JWT_SECRET and the database password into the environment of a service
-      # that has no use for either.
-      #
-      # admin/admin is acceptable only because Grafana is reachable solely
-      # from the VMware NAT network. Set a real password before that changes.
+      # These come from a `.env` file BESIDE this compose file, not from
+      # config/staging.env: Compose does not read env_file for `${...}`
+      # interpolation. Grafana is deliberately not env_file'd from staging.env
+      # either, since that would put JWT_SECRET and the database password into
+      # the environment of a service with no use for either.
       GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?set GRAFANA_PASSWORD in .env beside this file — see docs/RUNBOOK.md}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"

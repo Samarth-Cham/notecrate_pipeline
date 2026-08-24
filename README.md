@@ -134,15 +134,15 @@ python eval/run_answer_eval.py         # generation metrics (~25 min)
 python eval/calibrate.py               # sweep detector thresholds vs labels
 ```
 
-Latest full run (`eval/results/week5_minilm_*`):
+Latest full run (`eval/results/week6_final_*`):
 
 | Metric | Value |
 |---|---|
-| faithfulness | 0.579 |
-| answer relevancy | 0.863 |
-| keyword coverage | 0.692 |
-| refusal accuracy | 0.75 (3 at gate, 0 at model) |
-| latency mean / p95 | 8.3s / 16.7s |
+| faithfulness | 0.617 |
+| answer relevancy | 0.847 |
+| keyword coverage | 0.673 |
+| refusal accuracy | 1.00 (3 at gate, 1 at model) |
+| latency mean / p95 | **6.7s / 13.1s** |
 
 Disabling conflict detection moved faithfulness 0.417 → 0.610 and cut latency
 40%. Re-enable it with `--conflicts` to reproduce the cost.
@@ -173,27 +173,35 @@ tracked would have caught it — `hit@5` is 1.000 either way.
 
 End to end this took the full eval from **28.0s to 8.3s mean**.
 
-### What it cost
+### What it cost — nothing measurable, but see the caveat
 
-One regression, and it is a real one. The freshness question — *"How did we fix
-the pgvector password authentication issue?"*, whose answer postdates the corpus
-— used to be declined by the model:
+The run immediately after the swap showed refusal accuracy falling 1.00 → 0.75:
+the freshness question — *"How did we fix the pgvector password authentication
+issue?"*, whose answer postdates the corpus — was answered rather than declined.
+That looked like a real cost and was reported as one.
 
-> "We didn't actually fix a pgvector password authentication issue. The sources
-> mention GitHub authentication issues, not pgvector."
+It was not. A later run with identical generation inputs declined it again:
 
-It is now answered: *"We used a token (quick fix) or SSH (best fix) [3]."* The
-different ranking surfaces GitHub-auth chunks higher, and the model conflates
-them with the question. Refusal accuracy fell 1.00 → 0.75.
+| run | answer to Q12 |
+|---|---|
+| week5_minilm | "We used a token (quick fix) or SSH (best fix) [3]." |
+| week6_final | "We didn't fix the pgvector password authentication issue. The sources mention GitHub authentication issues, but not pgvector..." |
 
-The noise floor cannot help here: `vec_top` is 0.708, above the 0.69 gate either
-way. Freshness questions are on-topic by construction — that is why refusal has
-a model layer at all, and the model layer is what regressed.
+The only change between those runs was `MAX_PREMISES`, which affects *tagging*
+and runs after generation — so the model saw the same prompt both times and
+answered differently. At temperature 0.2 this question is a coin flip.
 
-Kept anyway: a 3.4x latency win with better retrieval metrics and better answer
-relevancy, against one question in a four-question negative set. The fix belongs
-in the generation prompt (be sceptical when retrieved chunks are topically near
-but do not address the question), not in the reranker.
+**The lesson is the one already recorded for faithfulness, applied to a metric
+where it was initially missed: single-question comparisons at non-zero
+temperature prove nothing.** With four negative questions, refusal accuracy
+moves in 0.25 steps, so one stochastic question swings it by a quarter. Judge it
+across runs or not at all.
+
+The underlying weakness is real even if the measurement was not: a freshness
+question is on-topic by construction, so `vec_top` (0.708) sits above the 0.69
+gate and only the model layer can catch it. Whether it does is currently a
+matter of chance. Hardening the generation prompt to be sceptical when chunks
+are topically near but do not address the question would make it reliable.
 
 ### The coupling that will bite you
 
@@ -272,9 +280,11 @@ so there is little quality to protect.
 - **The noise floor margin is 0.026** on 30 questions — tuned, not proven.
   Re-fit when the corpus or the embedding scheme changes; `src/reembed.py`
   prints a reminder for exactly that reason.
-- **Freshness questions are answered rather than refused** since the reranker
-  swap — see "What it cost" above. One question of four in the negative set,
-  and the fix belongs in the generation prompt.
+- **Freshness questions are caught non-deterministically.** A question whose
+  answer postdates the corpus is on-topic by construction, so the similarity
+  gate cannot catch it and only the model can. Whether it does varies run to
+  run at temperature 0.2 — observed both declined and answered with identical
+  inputs. Hardening the generation prompt would make it reliable.
 - **Scale-coupled constants.** `ROLE_BOOST` depends on the reranker's score
   scale and `NOISE_FLOOR` on the embedding model. Both fail silently when the
   underlying model changes: retrieval keeps working and the affected feature
