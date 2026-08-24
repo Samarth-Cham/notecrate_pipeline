@@ -134,15 +134,15 @@ python eval/run_answer_eval.py         # generation metrics (~25 min)
 python eval/calibrate.py               # sweep detector thresholds vs labels
 ```
 
-Latest full run (`eval/results/week5_final_*`):
+Latest full run (`eval/results/week5_minilm_*`):
 
 | Metric | Value |
 |---|---|
-| faithfulness | 0.610 |
-| answer relevancy | 0.818 |
-| keyword coverage | 0.673 |
-| refusal accuracy | 1.00 (3 at gate, 1 at model) |
-| latency mean / p95 | 28.0s / 41.1s |
+| faithfulness | 0.579 |
+| answer relevancy | 0.863 |
+| keyword coverage | 0.692 |
+| refusal accuracy | 0.75 (3 at gate, 0 at model) |
+| latency mean / p95 | 8.3s / 16.7s |
 
 Disabling conflict detection moved faithfulness 0.417 → 0.610 and cut latency
 40%. Re-enable it with `--conflicts` to reproduce the cost.
@@ -150,6 +150,108 @@ Disabling conflict detection moved faithfulness 0.417 → 0.610 and cut latency
 **Aggregate faithfulness has a measured noise floor of about ±0.04** — two runs
 of identical code gave 0.429 and 0.393. Per question the swing reaches 0.50.
 Compare aggregates over the full set; never single questions.
+
+## Retrieval tuning: why the reranker is a 22M model
+
+The reranker was chosen by measurement, not reputation. `eval/tune_rerank.py`
+sweeps model × candidate count against the eval set:
+
+| model | cand | hit@5 | P@5 | R@5 | MRR | rerank |
+|---|---|---|---|---|---|---|
+| `bge-reranker-base` (278M) | 20 | 1.000 | 0.700 | 0.853 | 0.892 | 7.64s |
+| `bge-reranker-base` | 10 | 1.000 | 0.777 | 0.865 | 0.904 | 3.64s |
+| `ms-marco-MiniLM-L-6` (22M) | 20 | 1.000 | 0.792 | 0.859 | 0.955 | 1.27s |
+| **`ms-marco-MiniLM-L-6`** | **10** | 1.000 | **0.800** | 0.859 | **0.974** | **0.63s** |
+
+**12x faster and better on every metric** — not the trade a 22M model against a
+278M one is supposed to produce. Two things explain it. `ms-marco-MiniLM` is
+trained directly on passage ranking, which is exactly this task. And
+`bge-reranker-base` was *actively harmful*: plain vector search scores MRR
+0.973, so at 0.892 the old reranker was reordering good results into worse ones
+and charging 7.6s for it. That had been true since Week 3, and no metric being
+tracked would have caught it — `hit@5` is 1.000 either way.
+
+End to end this took the full eval from **28.0s to 8.3s mean**.
+
+### What it cost
+
+One regression, and it is a real one. The freshness question — *"How did we fix
+the pgvector password authentication issue?"*, whose answer postdates the corpus
+— used to be declined by the model:
+
+> "We didn't actually fix a pgvector password authentication issue. The sources
+> mention GitHub authentication issues, not pgvector."
+
+It is now answered: *"We used a token (quick fix) or SSH (best fix) [3]."* The
+different ranking surfaces GitHub-auth chunks higher, and the model conflates
+them with the question. Refusal accuracy fell 1.00 → 0.75.
+
+The noise floor cannot help here: `vec_top` is 0.708, above the 0.69 gate either
+way. Freshness questions are on-topic by construction — that is why refusal has
+a model layer at all, and the model layer is what regressed.
+
+Kept anyway: a 3.4x latency win with better retrieval metrics and better answer
+relevancy, against one question in a four-question negative set. The fix belongs
+in the generation prompt (be sceptical when retrieved chunks are topically near
+but do not address the question), not in the reranker.
+
+### The coupling that will bite you
+
+**`ROLE_BOOST` must be recalibrated whenever `RERANK_MODEL` changes.** Score
+scales differ by an order of magnitude — `bge-reranker` emits sigmoid-squashed
+(0,1), `ms-marco-MiniLM` emits raw logits from about −8 to +9. At the old 0.08
+the boost became a rounding error, and **nothing would have failed**: the API
+keeps returning a `roles` field and an adjustment of no effect.
+
+Scaling by "one rank position" is not enough either. That gave 0.75, and
+`eval/run_role_eval.py` showed junior/senior overlap at 0.887 against 0.712
+before — a third as effective. MiniLM's gap distribution is skewed (median 2.93,
+mean 4.02). Calibrate against the overlap metric instead:
+
+| boost | overlap | unchanged | disjoint |
+|---|---|---|---|
+| 0.75 | 0.887 | 6/8 | 0/8 |
+| 1.50 | 0.815 | 5/8 | 0/8 |
+| **2.50** | **0.774** | **4/8** | 0/8 |
+| 4.00 | 0.640 | 3/8 | 0/8 |
+| 6.00 | 0.640 | 3/8 | 0/8 |
+
+4.00 and 6.00 producing identical results means the boost has stopped competing
+with relevance and is simply sorting by role — a filter wearing a boost's
+clothes, which §2.3 forbids. 2.50 reproduces the previously calibrated
+behaviour with room before that edge.
+
+A test asserts `ROLE_BOOST` matches the active reranker, so a future swap fails
+loudly instead of silently disabling the feature.
+
+## Load test (§5)
+
+```bash
+docker run --rm -i -e BASE=http://<vm>:8080 -e PASSWORD=... \
+  grafana/k6:latest run - < ops/loadtest/query.js
+```
+
+Ramps 1 → 5 VUs over 7 minutes against the staging VM (4 cores):
+
+| | avg | p95 |
+|---|---|---|
+| `stage_retrieve` | 2.12s | 2.82s |
+| `stage_generate` | 2.17s | 2.73s |
+| `stage_verify` | **6.39s** | **15.76s** |
+| end-to-end | 28.8s | 1m27s |
+
+Zero 5xx, and 14% of requests shed as 429 by the rate limiter — which is the
+result the limits exist for.
+
+**The finding: stages sum to ~10.7s but requests average 28.8s.** The ~18s gap
+is queueing, not work. Capacity is roughly **1–2 concurrent users**; past that,
+per-stage timings stay flat and latency is pure CPU contention. There is nothing
+to tune away on a single 4-core box — the answer is more cores or more replicas,
+and the rate limiter correctly sheds the rest.
+
+`verify` is now 60% of the work, so it is the next target: `RETRIEVE_K = 3 → 1`
+in `verify.py` would cut it roughly threefold, and tag accuracy is only ~0.54,
+so there is little quality to protect.
 
 ## Known limitations
 
@@ -167,5 +269,14 @@ Compare aggregates over the full set; never single questions.
 - **The validation labels are model-generated**, not human. See
   `eval/labels/README.md`. They make the thresholds measurable rather than
   guessed, but they share blind spots with the system they grade.
-- **The noise floor margin is 0.009** on 30 questions — tuned, not proven.
-  Re-fit when the corpus changes.
+- **The noise floor margin is 0.026** on 30 questions — tuned, not proven.
+  Re-fit when the corpus or the embedding scheme changes; `src/reembed.py`
+  prints a reminder for exactly that reason.
+- **Freshness questions are answered rather than refused** since the reranker
+  swap — see "What it cost" above. One question of four in the negative set,
+  and the fix belongs in the generation prompt.
+- **Scale-coupled constants.** `ROLE_BOOST` depends on the reranker's score
+  scale and `NOISE_FLOOR` on the embedding model. Both fail silently when the
+  underlying model changes: retrieval keeps working and the affected feature
+  quietly stops. A test guards the first; `reembed.py`'s closing message is
+  the only guard on the second.

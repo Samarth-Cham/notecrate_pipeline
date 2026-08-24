@@ -1,0 +1,119 @@
+{
+  "current/3": {
+    "accuracy": 0.5,
+    "macro_f1": 0.4005973715651135,
+    "per_sentence_s": 1.0376612111118717,
+    "predicted": {
+      "uncertain": 24,
+      "grounded": 27,
+      "inferred": 3
+    },
+    "n": 54,
+    "model": "cross-encoder/nli-deberta-v3-base",
+    "premises": 3
+  },
+  "current/2": {
+    "accuracy": 0.5370370370370371,
+    "macro_f1": 0.44365079365079363,
+    "per_sentence_s": 0.6452657092594125,
+    "predicted": {
+      "uncertain": 30,
+      "grounded": 21,
+      "inferred": 3
+    },
+    "n": 54,
+    "model": "cross-encoder/nli-deberta-v3-base",
+    "premises": 2
+  },
+  "current/1": {
+    "accuracy": 0.48148148148148145,
+    "macro_f1": 0.34470761407734507,
+    "per_sentence_s": 0.33163790000037774,
+    "predicted": {
+      "uncertain": 35,
+      "grounded": 18,
+      "inferred": 1
+    },
+    "n": 54,
+    "model": "cross-encoder/nli-deberta-v3-base",
+    "premises": 1
+  },
+  "distilroberta/3": {
+    "accuracy": 0.2777777777777778,
+    "macro_f1": 0.2505050505050505,
+    "per_sentence_s": 0.3560660351845231,
+    "predicted": {
+      "uncertain": 28,
+      "grounded": 9,
+      "inferred": 17
+    },
+    "n": 54,
+    "model": "cross-encoder/nli-distilroberta-base",
+    "premises": 3
+  },
+  "distilroberta/2": {
+    "accuracy": 0.2777777777777778,
+    "macro_f1": 0.2421123731314101,
+    "per_sentence_s": 0.22242688518491815,
+    "predicted": {
+      "uncertain": 35,
+      "grounded": 7,
+      "inferred": 12
+    },
+    "n": 54,
+    "model": "cross-encoder/nli-distilroberta-base",
+    "premises": 2
+  },
+  "distilroberta/1": {
+    "accuracy": 0.3148148148148148,
+    "macro_f1": 0.2614496614496615,
+    "per_sentence_s": 0.10743732222181279,
+    "predicted": {
+      "uncertain": 43,
+      "grounded": 4,
+      "inferred": 7
+    },
+    "n": 54,
+    "model": "cross-encoder/nli-distilroberta-base",
+    "premises": 1
+  },
+  "minilm/3": {
+    "accuracy": 0.3888888888888889,
+    "macro_f1": 0.3496153846153846,
+    "per_sentence_s": 0.3553286407404812,
+    "predicted": {
+      "uncertain": 20,
+      "grounded": 15,
+      "inferred": 19
+    },
+    "n": 54,
+    "model": "cross-encoder/nli-MiniLM2-L6-H768",
+    "premises": 3
+  },
+  "minilm/2": {
+    "accuracy": 0.3148148148148148,
+    "macro_f1": 0.2790784095131921,
+    "per_sentence_s": 0.22389182222212656,
+    "predicted": {
+      "uncertain": 27,
+      "grounded": 11,
+      "inferred": 16
+    },
+    "n": 54,
+    "model": "cross-encoder/nli-MiniLM2-L6-H768",
+    "premises": 2
+  },
+  "minilm/1": {
+    "accuracy": 0.3148148148148148,
+    "macro_f1": 0.27349896480331265,
+    "per_sentence_s": 0.10738320740751482,
+    "predicted": {
+      "uncertain": 34,
+      "grounded": 7,
+      "inferred": 13
+    },
+    "n": 54,
+    "model": "cross-encoder/nli-MiniLM2-L6-H768",
+    "premises": 1
+  }
+}

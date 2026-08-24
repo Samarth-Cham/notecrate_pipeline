@@ -53,7 +53,31 @@ GROUNDED_THRESHOLD = 0.55    # entailment probability
 INFERRED_THRESHOLD = 0.20    # below this, nothing meaningfully supports it
 CONTRADICTED_THRESHOLD = 0.50
 
-RETRIEVE_K = 3               # fresh chunks pulled per sentence
+# Premises per sentence. Measured by eval/tune_nli.py against the 54 labelled
+# sentences — FEWER premises is both faster and more accurate:
+#
+#   premises   accuracy   macro-F1   per-sentence
+#       3        0.500      0.401       1.038s
+#       2        0.537      0.444       0.645s   <- this
+#       1        0.481      0.345       0.332s
+#
+# Not the shape you would guess. More evidence helps only if the evidence is
+# relevant; the third premise is usually an off-topic chunk, and NLI on
+# unrelated text returns confident nonsense (the same failure that makes
+# conflict detection unusable — see src/conflict.py). One premise is too few
+# to recover from a single bad retrieval, so 2 is the turning point.
+#
+# CONSEQUENCE FOR THE METRICS: this tagger is more conservative — on the
+# labelled set it predicts `grounded` 21 times against the old 27. Faithfulness
+# is "fraction of sentences TAGGED grounded", so the reported number falls
+# while tagging accuracy rises. A drop after this change is the metric getting
+# more honest, not the answers getting worse.
+#
+# Smaller NLI models were also swept and are not viable: nli-distilroberta-base
+# scores 0.278-0.315 and nli-MiniLM2-L6-H768 0.315-0.389, against 0.537 here.
+# Unlike the reranker, there is no free lunch on model size for this task.
+RETRIEVE_K = 2               # fresh chunks pulled per sentence
+MAX_PREMISES = 2             # scored per sentence, after cited + retrieved are merged
 MIN_WORDS = 4                # shorter fragments are headings/list labels, not claims
 
 CITATION_RE = re.compile(r"\[(\d+(?:\s*,\s*\d+)*)\]")
@@ -195,6 +219,12 @@ def verify(answer: str, chunks: list[dict], *, retrieve_k: int = RETRIEVE_K,
             if key not in seen:
                 seen.add(key)
                 unique.append(p)
+
+        # Cap AFTER dedupe, so the count is what was actually measured. A
+        # sentence citing several chunks would otherwise be scored against
+        # more premises than the sweep tested, at the accuracy those extra
+        # premises were shown to cost.
+        unique = unique[:MAX_PREMISES]
 
         start = len(pairs)
         pairs.extend((p["text"], claim) for p in unique)
